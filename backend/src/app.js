@@ -185,7 +185,8 @@ export function createApp({ store, aiService }) {
       const card = task.card || {};
       if (!includesAny(card.skills || task.skills || [], skillFilters)) return false;
       if (!includesAny(card.technologies || task.technologies || [], technologyFilters)) return false;
-      if (deadlineBefore && (!card.deadline || card.deadline > deadlineBefore)) return false;
+      const deadline = card.deadline || task.deadline;
+      if (deadlineBefore && (!deadline || deadline > deadlineBefore)) return false;
       return true;
     });
     if (requestedStatus === "published" || requestedStatus === "all") {
@@ -284,11 +285,7 @@ export function createApp({ store, aiService }) {
     }
     const updated = await store.updateTask(task.id, (current) => {
       if (current.status === "published") return null;
-      if (current.status !== "ready" || !current.card || current.readinessScore < 75) {
-        const error = new Error("Задача ещё недостаточно готова к публикации.");
-        error.status = 409;
-        throw error;
-      }
+      // Готовность — рекомендация; решение о публикации подтверждает пользователь.
       return { status: "published", publishedAt: new Date().toISOString() };
     });
     response.json(updated);
@@ -297,6 +294,20 @@ export function createApp({ store, aiService }) {
   app.post("/api/tasks/:id/archive", asyncHandler(async (request, response) => {
     const task = await requireTask(store, request.params.id);
     const updated = await store.updateTask(task.id, { status: "archived" });
+    response.json(updated);
+  }));
+
+  app.post("/api/tasks/:id/restore", asyncHandler(async (request, response) => {
+    const task = await requireTask(store, request.params.id);
+    const updated = await store.updateTask(task.id, (current) => {
+      if (current.status !== "archived") return null;
+      // Восстановление не публикует задачу и не удаляет карточку или отклики.
+      if (current.card) {
+        const readiness = calculateReadiness(current, current.card);
+        return { status: readiness.status, readinessScore: readiness.score, readinessExplanation: readiness.explanation };
+      }
+      return { status: current.clarificationQuestions?.length ? "needs_clarification" : "draft" };
+    });
     response.json(updated);
   }));
 

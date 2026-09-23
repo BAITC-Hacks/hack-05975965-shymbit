@@ -47,7 +47,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 
 export const api = {
   async getTasks(status: ChallengeTask['status'] | 'all' = 'published'): Promise<ChallengeTask[]> {
-    if (USE_MOCK) return mockApi.getTasks()
+    if (USE_MOCK) return mockApi.getTasks(status)
     return normalizeTaskList(await request(`/api/tasks?status=${encodeURIComponent(status)}`))
   },
   async getTask(id: string): Promise<ChallengeTask> {
@@ -88,6 +88,10 @@ export const api = {
   async archiveTask(id: string): Promise<ChallengeTask> {
     if (USE_MOCK) return mockApi.archiveTask(id)
     return normalizeTask(await request(`/api/tasks/${id}/archive`, { method: 'POST' }))
+  },
+  async restoreTask(id: string): Promise<ChallengeTask> {
+    if (USE_MOCK) return mockApi.restoreTask(id)
+    return normalizeTask(await request(`/api/tasks/${id}/restore`, { method: 'POST' }))
   },
   async createApplication(taskId: string, draft: ApplicationDraft): Promise<Application> {
     if (USE_MOCK) return mockApi.createApplication(taskId, draft)

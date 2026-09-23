@@ -64,6 +64,7 @@ export function ClarifyPage() {
 
   return <div className="page page--form"><div className="container container--narrow">
     <Link className="back-link" to={`/tasks/${id}/edit`}><ArrowLeft size={17} />Вернуться к описанию</Link>
+    <Link className="button button--secondary" to={`/tasks/${id}`}>Открыть карточку и опубликовать без уточнения</Link>
     <div className="page-heading"><span className="pill"><Sparkles size={15} />Шаг 2 из 3</span><h1>Уточним важные детали</h1><p>AI проанализировал описание и подготовил вопросы. Ответы сделают карточку понятной для команд.</p></div>
     {loading ? <Loader label="AI анализирует задачу…" /> : error ? <ErrorState message={error} retry={requestQuestions} /> : (
       <form className="form-card clarification" onSubmit={submit}>

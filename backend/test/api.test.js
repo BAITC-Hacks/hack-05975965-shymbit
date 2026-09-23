@@ -206,8 +206,11 @@ test("черновики не попадают в публичный катал�
   const catalog = await request(server.baseUrl, "GET", "/api/tasks");
   assert.equal(catalog.data.total, 0);
 
-  const unpublished = await request(server.baseUrl, "POST", `/api/tasks/${created.data.id}/publish`, { confirm: true });
-  assert.equal(unpublished.response.status, 409);
+  const unpublished = await request(server.baseUrl, "POST", `/api/tasks/${created.data.id}/publish`, { confirm: false });
+  assert.equal(unpublished.response.status, 400);
+  const published = await request(server.baseUrl, "POST", `/api/tasks/${created.data.id}/publish`, { confirm: true });
+  assert.equal(published.response.status, 200);
+  assert.equal((await request(server.baseUrl, "GET", "/api/tasks")).data.total, 1);
 });
 
 test("профили команд, фильтрация, принятые отклики, отзывы и рейтинг", async (t) => {

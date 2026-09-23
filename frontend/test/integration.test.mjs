@@ -79,6 +79,19 @@ async function scenario(api) {
   assert.equal((await api.getAssistantPlans(task.id, team.id)).length, 2);
   await api.archiveTask(task.id);
   await assert.rejects(() => api.generateAssistantPlan(task.id, team.id));
+  assert.ok(!(await api.getTasks()).some((value) => value.id === task.id));
+  assert.equal((await api.restoreTask(task.id)).status, 'ready');
+  assert.ok(!(await api.getTasks()).some((value) => value.id === task.id));
+  assert.equal((await api.getApplications(task.id))[0].status, 'accepted');
+  assert.equal((await api.getAssistantPlans(task.id, team.id)).length, 2);
+  await api.archiveTask(task.id);
+  assert.equal((await api.publishTask(task.id)).status, 'published');
+  assert.ok((await api.getTasks()).some((value) => value.id === task.id));
+  const immediate = await api.createTask(taskDraft);
+  await api.archiveTask(immediate.id);
+  assert.equal((await api.restoreTask(immediate.id)).status, 'draft');
+  assert.equal((await api.publishTask(immediate.id)).status, 'published');
+  assert.ok((await api.getTasks()).some((value) => value.id === immediate.id));
 }
 
 test('Frontend-клиент и backend: команда, задача, отклик, отзыв и AI-планы; совместимость mock', async () => {

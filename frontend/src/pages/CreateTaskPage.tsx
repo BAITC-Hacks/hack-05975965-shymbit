@@ -57,14 +57,15 @@ export function CreateTaskPage() {
     setErrors((current) => ({ ...current, [key]: undefined }))
   }
 
-  const submit = async (event: FormEvent) => {
-    event.preventDefault()
+  const submit = async (event?: FormEvent, clarify = true) => {
+    event?.preventDefault()
+    if (saving) return
     if (!validate()) { showToast('Проверьте обязательные поля.', 'error'); return }
     setSaving(true)
     try {
       const task = id ? await api.updateTask(id, draft) : await api.createTask(draft)
       showToast(id ? 'Изменения сохранены.' : 'Черновик задачи сохранён.', 'success')
-      navigate(`/tasks/${task.id || id}/clarify`)
+      navigate(`/tasks/${task.id || id}${clarify ? '/clarify' : ''}`)
     } catch (error) {
       showToast(getErrorMessage(error), 'error')
     } finally { setSaving(false) }
@@ -92,7 +93,8 @@ export function CreateTaskPage() {
           <div className="form-section"><div className="form-section__title"><span>3</span><div><h2>Команда и технологии</h2><p>Добавляйте значения клавишей Enter или через запятую.</p></div></div>
             <div className="form-grid"><div><TagInput label="Необходимые навыки *" value={draft.skills} onChange={(value) => update('skills', value)} placeholder="Аналитика данных, UX…" required />{errors.skills && <span className="field-error">{errors.skills}</span>}</div><TagInput label="Технологии, если известны" value={draft.technologies} onChange={(value) => update('technologies', value)} placeholder="Python, React…" /></div>
           </div>
-          <div className="form-actions"><Link className="button button--ghost" to="/my-tasks">Отмена</Link><button className="button button--primary" type="submit" disabled={saving}>{saving ? <><span className="button-spinner" />Сохраняем…</> : <><Save size={18} />{id ? 'Сохранить и уточнить' : 'Сохранить черновик'}<ArrowRight size={18} /></>}</button></div>
+          <p className="muted">Можно открыть карточку и опубликовать задачу сразу или сначала уточнить её с AI.</p>
+          <div className="form-actions"><Link className="button button--ghost" to="/my-tasks">Отмена</Link><button className="button button--secondary" type="button" disabled={saving} onClick={() => submit(undefined, false)}>Сохранить и открыть карточку</button><button className="button button--primary" type="submit" disabled={saving}>{saving ? <><span className="button-spinner" />Сохраняем…</> : <><Save size={18} />Сохранить и уточнить с AI<ArrowRight size={18} /></>}</button></div>
         </form>
       </div>
     </div>

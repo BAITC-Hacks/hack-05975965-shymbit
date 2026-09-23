@@ -46,7 +46,7 @@ const makeDraft = (draft: TaskDraft): ChallengeTask => ({
 })
 
 export const mockApi = {
-  async getTasks() { await wait(); return [...tasks] },
+  async getTasks(status: ChallengeTask['status'] | 'all' = 'published') { await wait(); return tasks.filter((task) => status === 'all' || task.status === status) },
   async getTask(id: string) { await wait(); return tasks.find((task) => task.id === id) ?? null },
   async createTask(draft: TaskDraft) { const task = makeDraft(draft); tasks.unshift(task); await wait(); return task },
   async updateTask(id: string, patch: Partial<ChallengeTask>) {
@@ -85,6 +85,13 @@ export const mockApi = {
   },
   async publishTask(id: string) { return this.updateTask(id, { status: 'published' }) },
   async archiveTask(id: string) { return this.updateTask(id, { status: 'archived' }) },
+  async restoreTask(id: string) {
+    const task = tasks.find((item) => item.id === id)
+    if (!task) throw new Error('Задача не найдена')
+    if (task.status !== 'archived') return task
+    const status = task.problem ? ((task.readinessScore || 0) >= 75 ? 'ready' : 'needs_clarification') : task.clarificationQuestions?.length ? 'needs_clarification' : 'draft'
+    return this.updateTask(id, { status })
+  },
   async createApplication(taskId: string, draft: ApplicationDraft) {
     const application: Application = { ...draft, id: crypto.randomUUID(), taskId, createdAt: new Date().toISOString(), status: 'submitted' }
     applications.unshift(application); await wait(); return application

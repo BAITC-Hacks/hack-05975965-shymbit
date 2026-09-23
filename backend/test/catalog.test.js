@@ -128,20 +128,25 @@ test("каталог исключает черновики, уточняемые
   const published = await app.publish((await app.ready()).id);
   assert.deepEqual(await app.request("GET", "/api/tasks"), { items: [published], total: 1 });
   assert.equal((await app.request("GET", "/api/tasks?status=all")).total, 5);
-  await app.publish(archived.id, 409);
+  await app.publish(archived.id);
+  assert.equal((await app.request("GET", "/api/tasks")).total, 2);
 });
 
-test("публикация требует явного подтверждения и существующей готовности", async (t) => {
+test("публикация требует подтверждения, но доступна без AI и порога готовности", async (t) => {
   const app = await fixture(t);
   const ready = await app.ready();
   for (const body of [undefined, {}, { confirm: false }, { confirm: "true" }]) {
     await app.request("POST", `/api/tasks/${ready.id}/publish`, body, 400);
   }
   assert.equal((await app.store.getTask(ready.id)).status, "ready");
-  await app.publish((await app.create()).id, 409);
+  const draftTask = await app.create();
+  const publishedDraft = await app.publish(draftTask.id);
+  assert.equal(publishedDraft.status, "published");
+  assert.equal(publishedDraft.card, null);
+  assert.equal(publishedDraft.title, draft.title);
   for (const patch of [{ readinessScore: 74 }, { readinessScore: 100, card: null }]) {
-    await app.store.updateTask(ready.id, patch);
-    await app.publish(ready.id, 409);
+    await app.store.updateTask(ready.id, { ...patch, status: "ready" });
+    assert.equal((await app.publish(ready.id)).status, "published");
   }
   await app.store.updateTask(ready.id, { card, readinessScore: 75 });
   await app.publish(ready.id);
@@ -149,7 +154,7 @@ test("публикация требует явного подтверждени�
   await app.publish("unknown", 404);
 });
 
-test("неполная карточка сохраняется, но не публикуется при низкой готовности", async (t) => {
+test("неполную карточку можно опубликовать вручную без повышения рейтинга", async (t) => {
   const app = await fixture(t, {
     generateCard: async () => ({ ...card, availableData: "", constraints: "", successCriteria: "" })
   });
@@ -157,9 +162,53 @@ test("неполная карточка сохраняется, но не пуб
   const generated = await app.request("POST", `/api/tasks/${task.id}/generate`, {});
   assert.equal(generated.readiness.score, 63);
   assert.equal(generated.task.status, "needs_clarification");
-  await app.publish(task.id, 409);
   assert.deepEqual(await app.request("GET", "/api/tasks"), { items: [], total: 0 });
   assert.deepEqual(await app.store.getTask(task.id), generated.task);
+  const published = await app.publish(task.id);
+  assert.equal(published.readinessScore, 63);
+  assert.deepEqual(published.card, generated.card);
+  assert.deepEqual(await app.request("GET", "/api/tasks"), { items: [published], total: 1 });
+});
+
+test("архив восстанавливается без потери данных и повторно публикуется после перезапуска", async (t) => {
+  const app = await fixture(t);
+  const task = await app.ready();
+  await app.publish(task.id);
+  const application = await app.store.createApplication({ taskId: task.id, teamName: "Команда" });
+  await app.request("POST", `/api/tasks/${task.id}/archive`, {});
+  const restored = await app.request("POST", `/api/tasks/${task.id}/restore`, {});
+  assert.equal(restored.status, "ready");
+  assert.deepEqual(restored.card, task.card);
+  assert.equal((await app.request("GET", "/api/tasks")).total, 0);
+  assert.deepEqual(await app.request("POST", `/api/tasks/${task.id}/restore`, {}), restored);
+  assert.deepEqual((await app.request("GET", `/api/tasks/${task.id}/applications`)).items, [application]);
+  await app.request("PATCH", `/api/tasks/${task.id}`, { contactPerson: "Новый контакт" });
+  await app.request("POST", `/api/tasks/${task.id}/archive`, {});
+  const published = await app.publish(task.id);
+  assert.equal(published.contactPerson, "Новый контакт");
+  assert.deepEqual(await app.request("POST", `/api/tasks/${task.id}/restore`, {}), published);
+  await app.stop();
+  await app.start();
+  assert.deepEqual((await app.request("GET", "/api/tasks")).items, [published]);
+  assert.deepEqual((await app.request("GET", `/api/tasks/${task.id}/applications`)).items, [application]);
+  await app.request("POST", "/api/tasks/unknown/restore", {}, 404);
+});
+
+test("восстановление черновика, вопросов и неполной карточки сохраняет этап подготовки", async (t) => {
+  const app = await fixture(t);
+  for (const [patch, expectedStatus] of [
+    [{}, "draft"],
+    [{ clarificationQuestions: [{ id: "q", question: "Вопрос", answer: "Ответ" }] }, "needs_clarification"],
+    [{ card: { title: "Неполная карточка" }, readinessScore: 100 }, "needs_clarification"]
+  ]) {
+    const task = await app.create();
+    await app.store.updateTask(task.id, { ...patch, status: "archived" });
+    const restored = await app.request("POST", `/api/tasks/${task.id}/restore`, {});
+    assert.equal(restored.status, expectedStatus);
+    if (patch.card) assert.equal(restored.readinessScore, 13);
+    if (patch.clarificationQuestions) assert.deepEqual(restored.clarificationQuestions, patch.clarificationQuestions);
+    assert.equal((await app.request("GET", "/api/tasks")).total, 0);
+  }
 });
 
 test("новые публикации идут первыми, одинаковые даты имеют стабильный порядок", async (t) => {
