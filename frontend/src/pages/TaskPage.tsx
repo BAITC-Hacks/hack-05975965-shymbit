@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { ErrorState, Loader } from '../components/AsyncState'
 import { ApplicationForm } from '../components/ApplicationForm'
+import { AssistantPlanner } from '../components/AssistantPlanner'
 import { ReadinessScore } from '../components/ReadinessScore'
 import { TaskStatusBadge } from '../components/StatusBadge'
 import { useToast } from '../components/Toast'
@@ -53,7 +54,9 @@ export function TaskPage() {
     <header className="task-header"><div><div className="task-header__meta"><span>{task.organization}</span><TaskStatusBadge status={task.status} /></div><h1>{task.title}</h1><p>{task.shortDescription}</p></div>{isPublic && <button className="button button--primary" onClick={() => setShowApplication(true)} disabled={showApplication}><Send size={18} />Откликнуться на задачу</button>}</header>
     {!isPublic && <div className="owner-actions"><Link className="button button--secondary" to={`/tasks/${id}/edit`}><Edit3 size={17} />Редактировать</Link><button className="button button--secondary" onClick={() => run('generate')} disabled={Boolean(action)}><RefreshCw size={17} />{action === 'generate' ? 'Формируем…' : 'Сформировать заново'}</button><Link className="button button--secondary" to={`/tasks/${id}/clarify`}><ClipboardList size={17} />Вернуться к вопросам</Link>{task.status === 'ready' && <button className="button button--primary" onClick={() => run('publish')} disabled={Boolean(action)}><Check size={18} />{action === 'publish' ? 'Публикуем…' : 'Опубликовать'}</button>}<Link className="button button--ghost" to={`/tasks/${id}/applications`}><Users size={17} />Отклики</Link>{task.status !== 'archived' && <button className="button button--danger-ghost" onClick={() => run('archive')} disabled={Boolean(action)}><Archive size={17} />В архив</button>}</div>}
     <ReadinessScore score={task.readinessScore} explanation={task.readinessExplanation} />
+    {isPublic && <a className="button button--secondary assistant-jump" href="#assistant-plan">Составить план решения с AI ↓</a>}
     <div className="detail-layout"><div className="detail-main">{blocks.filter(({ key }) => Boolean(task[key])).map(({ key, title }) => <section className="detail-block" key={key}><h2>{title}</h2><p>{String(task[key])}</p></section>)}</div><aside className="detail-aside"><section><h3>Необходимые навыки</h3><div className="chip-list">{task.skills.length ? task.skills.map((item) => <span className="chip" key={item}>{item}</span>) : <p className="muted">Не указаны</p>}</div></section><section><h3>Технологии</h3><div className="chip-list">{task.technologies.length ? task.technologies.map((item) => <span className="chip chip--accent" key={item}>{item}</span>) : <p className="muted">Не указаны</p>}</div></section></aside></div>
     {showApplication && <ApplicationForm taskId={id} onClose={() => setShowApplication(false)} />}
+    {isPublic && <AssistantPlanner key={id} taskId={id} />}
   </div></div>
 }

@@ -1,9 +1,10 @@
-import { BrainCircuit, Building2, Menu, Search, X } from 'lucide-react'
+import { BrainCircuit, Building2, Menu, Search, Users, X } from 'lucide-react'
 import { useState } from 'react'
 import { NavLink, Outlet, Link } from 'react-router-dom'
 
 const links = [
   { to: '/tasks', label: 'Каталог', icon: Search },
+  { to: '/teams', label: 'Команды', icon: Users },
   { to: '/my-tasks', label: 'Мои задачи', icon: Building2 },
 ]
 
@@ -30,6 +31,7 @@ export function Layout() {
           </nav>
         </div>
       </header>
+      {import.meta.env.VITE_USE_MOCK_API === 'true' && <div className="demo-banner" role="status">Демонстрационный режим · тестовые данные и AI-планы · изменения сохраняются до перезагрузки страницы</div>}
       <main><Outlet /></main>
       <footer className="footer">
         <div className="container footer__inner">

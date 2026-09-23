@@ -1,4 +1,5 @@
 import type { Application, ApplicationDraft, ChallengeTask, ClarificationQuestion, TaskDraft } from '../types'
+import { createMockTeamsApi } from './mockTeams'
 
 const wait = (ms = 350) => new Promise((resolve) => setTimeout(resolve, ms))
 
@@ -38,7 +39,6 @@ const tasks: ChallengeTask[] = [
 ]
 
 const applications: Application[] = []
-
 const makeDraft = (draft: TaskDraft): ChallengeTask => ({
   ...draft,
   id: crypto.randomUUID(),
@@ -95,4 +95,5 @@ export const mockApi = {
     if (!item) throw new Error('Отклик не найден')
     item.status = status; await wait(); return item
   },
+  ...createMockTeamsApi(tasks, applications),
 }
