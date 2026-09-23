@@ -48,6 +48,8 @@ export const normalizeTask = (raw: unknown): ChallengeTask => {
     readinessScore: Number(item.readinessScore ?? item.readiness_score ?? item.readiness_rating ?? 0),
     readinessExplanation: text(item.readinessExplanation, item.readiness_explanation, item.rating_explanation),
     createdAt: text(item.createdAt, item.created_at),
+    updatedAt: text(item.updatedAt, item.updated_at),
+    publishedAt: text(item.publishedAt, item.published_at),
     clarificationQuestions: normalizeQuestions(item.clarificationQuestions),
   }
 }

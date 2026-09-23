@@ -22,6 +22,8 @@ export interface ChallengeTask {
   readinessScore?: number
   readinessExplanation?: string
   createdAt?: string
+  updatedAt?: string
+  publishedAt?: string
   clarificationQuestions?: ClarificationQuestion[]
 }
 

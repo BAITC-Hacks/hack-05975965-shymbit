@@ -18,8 +18,8 @@ export default function App() {
       <Route element={<Layout />}>
         <Route index element={<HomePage />} />
         <Route path="tasks" element={<CatalogPage />} />
-        <Route path="tasks/new" element={<CreateTaskPage />} />
-        <Route path="tasks/:id/edit" element={<CreateTaskPage />} />
+        <Route path="tasks/new" element={<CreateTaskPage key="new" />} />
+        <Route path="tasks/:id/edit" element={<CreateTaskPage key="edit" />} />
         <Route path="tasks/:id/clarify" element={<ClarifyPage />} />
         <Route path="tasks/:id/applications" element={<ApplicationsPage />} />
         <Route path="tasks/:id" element={<TaskPage />} />

@@ -1,8 +1,9 @@
-import { ArrowLeft, ArrowRight, Save, WandSparkles } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Save } from 'lucide-react'
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { ErrorState, Loader } from '../components/AsyncState'
 import { TagInput } from '../components/TagInput'
+import { TaskProgress } from '../components/TaskProgress'
 import { useToast } from '../components/Toast'
 import { api, getErrorMessage } from '../lib/api'
 import type { TaskDraft } from '../types'
@@ -35,12 +36,17 @@ export function CreateTaskPage() {
 
   useEffect(() => {
     if (!id) return
-    api.getTask(id).then((task) => setDraft({
-      title: task.title, shortDescription: task.shortDescription, organization: task.organization,
-      contactPerson: task.contactPerson || '', desiredResult: task.desiredResult || task.expectedResult || '',
-      availableData: task.availableData || '', constraints: task.constraints || '', deadline: task.deadline || '',
-      skills: task.skills, technologies: task.technologies,
-    })).catch((error) => setLoadError(getErrorMessage(error))).finally(() => setLoading(false))
+    let active = true
+    api.getTask(id).then((task) => {
+      if (!active) return
+      setDraft({
+        title: task.title, shortDescription: task.shortDescription, organization: task.organization,
+        contactPerson: task.contactPerson || '', desiredResult: task.desiredResult || task.expectedResult || '',
+        availableData: task.availableData || '', constraints: task.constraints || '', deadline: task.deadline || '',
+        skills: task.skills, technologies: task.technologies,
+      })
+    }).catch((error) => { if (active) setLoadError(getErrorMessage(error)) }).finally(() => { if (active) setLoading(false) })
+    return () => { active = false }
   }, [id])
 
   const requiredKeys = useMemo(() => fields.filter((field) => field.required).map((field) => field.key), [])
@@ -77,7 +83,8 @@ export function CreateTaskPage() {
     <div className="page page--form">
       <div className="container container--narrow">
         <Link className="back-link" to={id ? `/tasks/${id}` : '/'}><ArrowLeft size={17} />Назад</Link>
-        <div className="page-heading"><span className="pill"><WandSparkles size={15} />Шаг 1 из 3</span><h1>{id ? 'Редактирование задачи' : 'Расскажите о вашей задаче'}</h1><p>Заполните основные поля. На следующем шаге AI поможет уточнить детали.</p></div>
+        <TaskProgress step={1} />
+        <div className="page-heading"><span className="eyebrow">Шаг 1 / 3 · Черновик</span><h1>{id ? <>Уточните <em>вашу задачу.</em></> : <>Большой проект начинается <em>с вашей задачи.</em></>}</h1><p>Опишите проблему своими словами. На следующем шаге AI задаст вопросы и поможет собрать понятную карточку.</p></div>
         <form className="form-card" onSubmit={submit} noValidate>
           <div className="form-section"><div className="form-section__title"><span>1</span><div><h2>Основная информация</h2><p>Коротко обозначьте суть и владельца задачи.</p></div></div>
             <div className="form-grid">

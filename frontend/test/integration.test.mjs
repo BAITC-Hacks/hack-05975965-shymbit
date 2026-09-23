@@ -48,12 +48,27 @@ async function scenario(api) {
   assert.equal((await api.getTeam(team.id)).projects[0].url, teamDraft.projects[0].url);
   assert.ok((await api.getTeams()).some((value) => value.id === team.id));
   const task = await api.createTask(taskDraft);
+  await assert.rejects(() => api.publishTask(task.id));
+  assert.ok(!(await api.getTasks()).some((value) => value.id === task.id));
+  assert.ok((await api.getTasks('draft')).some((value) => value.id === task.id));
+  assert.ok((await api.getTasks('all')).some((value) => value.id === task.id));
   const questions = await api.clarifyTask(task.id);
   await api.saveAnswers(task.id, Object.fromEntries(questions.map((q) => [q.id, 'По контрольным вопросам'])));
   const card = await api.generateTask(task.id);
   assert.ok(card.problem && card.goal && card.successCriteria);
-  await api.publishTask(task.id);
-  assert.ok((await api.getTasks()).some((value) => value.id === task.id));
+  assert.ok(!(await api.getTasks()).some((value) => value.id === task.id));
+  const published = await api.publishTask(task.id);
+  assert.ok(Number.isFinite(Date.parse(published.publishedAt)));
+  assert.ok(Number.isFinite(Date.parse(published.updatedAt)));
+  assert.deepEqual(await api.publishTask(task.id), published);
+  const catalog = await api.getTasks();
+  assert.equal(catalog.filter((value) => value.id === task.id).length, 1);
+  assert.equal(catalog[0].id, task.id);
+  assert.equal(catalog[0].publishedAt, published.publishedAt);
+  assert.ok(catalog.every((value) => value.status === 'published'));
+  await assert.rejects(() => api.updateTask(task.id, { title: 'Изменённая задача' }));
+  await assert.rejects(() => api.clarifyTask(task.id));
+  await assert.rejects(() => api.generateTask(task.id));
   const review = { taskId: task.id, authorName: 'Университет', score: 5, text: 'Команда подготовила полезное решение.' };
   await assert.rejects(() => api.createTeamReview(team.id, review));
   const application = await api.createApplication(task.id, {
@@ -78,15 +93,19 @@ async function scenario(api) {
   await api.generateAssistantPlan(task.id, team.id);
   assert.equal((await api.getAssistantPlans(task.id, team.id)).length, 2);
   await api.archiveTask(task.id);
+  assert.ok(!(await api.getTasks()).some((value) => value.id === task.id));
+  assert.ok((await api.getTasks('archived')).some((value) => value.id === task.id));
+  await assert.rejects(() => api.publishTask(task.id));
   await assert.rejects(() => api.generateAssistantPlan(task.id, team.id));
 }
 
-test('Frontend-клиент и backend: команда, задача, отклик, отзыв и AI-планы; совместимость mock', async () => {
+test('Frontend-клиент и backend: команда, задача, отклик, отзыв и AI-планы; совместимость mock', async (t) => {
   const directory = await mkdtemp(join(tmpdir(), 'sana-integration-'));
   let server, vite;
   try {
     const store = await createJsonStore(join(directory, 'db.json'));
-    server = createApp({ store, aiService: fakeAI }).listen(0, '127.0.0.1');
+    const aiService = { ...fakeAI };
+    server = createApp({ store, aiService }).listen(0, '127.0.0.1');
     await new Promise((resolve) => server.once('listening', resolve));
     vite = await createServer({
       root: fileURLToPath(new URL('../', import.meta.url)),
@@ -97,11 +116,31 @@ test('Frontend-клиент и backend: команда, задача, откли
       },
     });
     const { api } = await vite.ssrLoadModule('/src/lib/api.ts');
-    await scenario(api);
+    await t.test('Реальный backend: публикация, каталог и основной сценарий', () => scenario(api));
     await assert.rejects(() => api.getTeam('00000000-0000-4000-8000-000000000000'), (e) => e.status === 404);
     await assert.rejects(() => api.createTeam({ ...teamDraft, githubUrls: ['https://example.com'] }), (e) => e.status === 400);
+    await t.test('Конфликт AI-генерации возвращает 409 и сохраняет актуальную задачу', async () => {
+      const task = await api.createTask(taskDraft);
+      const started = Promise.withResolvers();
+      const release = Promise.withResolvers();
+      aiService.generateCard = async (draft) => {
+        started.resolve();
+        await release.promise;
+        return fakeAI.generateCard(draft);
+      };
+      const conflict = assert.rejects(api.generateTask(task.id), (error) => error.status === 409 && error.message.includes('Обновите данные'));
+      try {
+        await started.promise;
+        await api.updateTask(task.id, { title: 'Актуальное название после правки' });
+      } finally {
+        release.resolve();
+      }
+      await conflict;
+      assert.equal((await api.getTask(task.id)).title, 'Актуальное название после правки');
+      aiService.generateCard = fakeAI.generateCard;
+    });
     const { mockApi } = await vite.ssrLoadModule('/src/lib/mockApi.ts');
-    await scenario(mockApi);
+    await t.test('Mock сохраняет правила публикации и каталога backend', () => scenario(mockApi));
   } finally {
     if (vite) await vite.close();
     if (server) await new Promise((resolve) => server.close(resolve));

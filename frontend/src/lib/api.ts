@@ -47,7 +47,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 
 export const api = {
   async getTasks(status: ChallengeTask['status'] | 'all' = 'published'): Promise<ChallengeTask[]> {
-    if (USE_MOCK) return mockApi.getTasks()
+    if (USE_MOCK) return mockApi.getTasks(status)
     return normalizeTaskList(await request(`/api/tasks?status=${encodeURIComponent(status)}`))
   },
   async getTask(id: string): Promise<ChallengeTask> {
