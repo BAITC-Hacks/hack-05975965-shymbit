@@ -3,11 +3,17 @@ import { randomUUID } from "node:crypto";
 import { calculateReadiness } from "./readiness.js";
 import {
   answersSchema,
+  assistantPlanRequestSchema,
+  assistantPlanSchema,
   applicationCreateSchema,
   applicationPatchSchema,
   parseBody,
   taskCreateSchema,
-  taskPatchSchema
+  taskPatchSchema,
+  teamCreateSchema,
+  teamIdSchema,
+  teamPatchSchema,
+  teamReviewCreateSchema
 } from "./validation.js";
 
 const statuses = new Set(["draft", "needs_clarification", "ready", "published", "archived"]);
@@ -42,6 +48,29 @@ function includesAny(values, filters) {
   return filters.some((filter) => values.some((value) => String(value).toLowerCase().includes(filter)));
 }
 
+function badRequest(message) {
+  const error = new Error(message);
+  error.status = 400;
+  return error;
+}
+
+function validateAssistantPlan(plan, team) {
+  const result = assistantPlanSchema.safeParse(plan);
+  if (!result.success) {
+    const error = new Error("AI вернул неполный план. Попробуйте сгенерировать его ещё раз.");
+    error.status = 502;
+    throw error;
+  }
+
+  const memberNames = new Set(team.members.map((member) => member.name.trim().toLocaleLowerCase()));
+  if (result.data.assignments.some((assignment) => !memberNames.has(assignment.memberName.trim().toLocaleLowerCase()))) {
+    const error = new Error("AI распределил задачи между участниками, которых нет в профиле команды.");
+    error.status = 502;
+    throw error;
+  }
+  return result.data;
+}
+
 export function createApp({ store, aiService }) {
   const app = express();
   app.disable("x-powered-by");
@@ -57,6 +86,76 @@ export function createApp({ store, aiService }) {
   app.get("/health", (request, response) => {
     response.json({ status: "ok" });
   });
+
+  app.post("/api/teams", asyncHandler(async (request, response) => {
+    const data = parseBody(teamCreateSchema, request.body);
+    const team = await store.createTeam(data);
+    response.status(201).json(team);
+  }));
+
+  app.get("/api/teams", asyncHandler(async (request, response) => {
+    const minimumRating = request.query.minimumRating === undefined ? null : Number(request.query.minimumRating);
+    if (minimumRating !== null && (!Number.isFinite(minimumRating) || minimumRating < 0 || minimumRating > 5)) {
+      throw badRequest("Минимальный рейтинг должен быть числом от 0 до 5.");
+    }
+
+    const skillFilters = parseList(request.query.skill);
+    const technologyFilters = parseList(request.query.technology);
+    const teams = await store.listTeams();
+    const items = teams.filter((team) => {
+      const memberSkills = team.members.flatMap((member) => member.skills || []);
+      if (!includesAny([...team.skills, ...memberSkills], skillFilters)) return false;
+      if (!includesAny(team.technologies, technologyFilters)) return false;
+      return minimumRating === null || team.rating.average >= minimumRating;
+    });
+    response.json({ items, total: items.length });
+  }));
+
+  app.get("/api/teams/:id/reviews", asyncHandler(async (request, response) => {
+    const team = await store.getTeam(request.params.id);
+    if (!team) throw notFound("Команда не найдена.");
+    const reviews = await store.listReviews(team.id);
+    response.json({ items: reviews, total: reviews.length });
+  }));
+
+  app.post("/api/teams/:id/reviews", asyncHandler(async (request, response) => {
+    const team = await store.getTeam(request.params.id);
+    if (!team) throw notFound("Команда не найдена.");
+    const data = parseBody(teamReviewCreateSchema, request.body);
+    const task = await store.getTask(data.taskId);
+    if (!task) throw notFound("Задача не найдена.");
+    if (!await store.hasAcceptedApplication(task.id, team.id)) {
+      const error = new Error("Оставить отзыв можно после принятия отклика этой команды.");
+      error.status = 409;
+      throw error;
+    }
+    if (await store.hasApplicationReview(team.id, task.id, data.authorName)) {
+      const error = new Error("Эта организация уже оставила отзыв по данной задаче.");
+      error.status = 409;
+      throw error;
+    }
+    const review = await store.createReview({ teamId: team.id, ...data });
+    if (!review) {
+      const error = new Error("Эта организация уже оставила отзыв по данной задаче.");
+      error.status = 409;
+      throw error;
+    }
+    response.status(201).json({ review, rating: (await store.getTeam(team.id)).rating });
+  }));
+
+  app.get("/api/teams/:id", asyncHandler(async (request, response) => {
+    const team = await store.getTeam(request.params.id);
+    if (!team) throw notFound("Команда не найдена.");
+    response.json(team);
+  }));
+
+  app.patch("/api/teams/:id", asyncHandler(async (request, response) => {
+    const existing = await store.getTeam(request.params.id);
+    if (!existing) throw notFound("Команда не найдена.");
+    const patch = parseBody(teamPatchSchema, request.body);
+    if (Object.keys(patch).length === 0) throw badRequest("Укажите хотя бы одно поле для изменения.");
+    response.json(await store.updateTeam(existing.id, patch));
+  }));
 
   app.post("/api/tasks", asyncHandler(async (request, response) => {
     const data = parseBody(taskCreateSchema, request.body);
@@ -204,7 +303,18 @@ export function createApp({ store, aiService }) {
       throw error;
     }
     const data = parseBody(applicationCreateSchema, request.body);
-    const application = await store.createApplication({ taskId: task.id, ...data });
+    let applicationData = data;
+    if (data.teamId) {
+      const team = await store.getTeam(data.teamId);
+      if (!team) throw notFound("Команда не найдена.");
+      applicationData = {
+        ...data,
+        teamName: team.name,
+        members: team.members.map((member) => member.name),
+        technologies: team.technologies
+      };
+    }
+    const application = await store.createApplication({ taskId: task.id, ...applicationData });
     response.status(201).json(application);
   }));
 
@@ -224,6 +334,44 @@ export function createApp({ store, aiService }) {
     const application = await store.getApplication(request.params.id);
     if (!application) throw notFound("Отклик не найден.");
     response.json(await store.updateApplication(application.id, data));
+  }));
+
+  app.post("/api/tasks/:taskId/assistant/plan", asyncHandler(async (request, response) => {
+    const task = await requireTask(store, request.params.taskId);
+    if (task.status !== "published") {
+      const error = new Error("AI-план можно создать только для опубликованной задачи.");
+      error.status = 409;
+      throw error;
+    }
+    const { teamId, focus } = parseBody(assistantPlanRequestSchema, request.body);
+    const team = await store.getTeam(teamId);
+    if (!team) throw notFound("Команда не найдена.");
+    if (!team.members.length) {
+      const error = new Error("Добавьте участников в профиль команды перед генерацией плана.");
+      error.status = 409;
+      throw error;
+    }
+
+    const plan = validateAssistantPlan(await aiService.generateAssistantPlan(task, team, focus), team);
+    const savedPlan = await store.createAssistantPlan({ taskId: task.id, teamId: team.id, plan });
+    response.status(201).json(savedPlan);
+  }));
+
+  app.get("/api/tasks/:taskId/assistant/plans", asyncHandler(async (request, response) => {
+    const task = await requireTask(store, request.params.taskId);
+    const teamId = request.query.teamId;
+    if (typeof teamId !== "string") throw badRequest("Параметр teamId обязателен.");
+    if (!teamIdSchema.safeParse(teamId).success) throw badRequest("Параметр teamId должен быть корректным UUID.");
+    const team = await store.getTeam(teamId);
+    if (!team) throw notFound("Команда не найдена.");
+    const items = await store.listAssistantPlans(task.id, team.id);
+    response.json({ items, total: items.length });
+  }));
+
+  app.get("/api/assistant-plans/:id", asyncHandler(async (request, response) => {
+    const plan = await store.getAssistantPlan(request.params.id);
+    if (!plan) throw notFound("План решения не найден.");
+    response.json(plan);
   }));
 
   app.use((request, response, next) => next(notFound("Маршрут не найден.")));
