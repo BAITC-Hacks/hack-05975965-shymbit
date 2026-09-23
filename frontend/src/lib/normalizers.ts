@@ -1,4 +1,4 @@
-import type { Application, ChallengeTask, ClarificationQuestion, TaskStatus } from '../types'
+import type { Application, AssistantPlan, ChallengeTask, ClarificationQuestion, Team, TeamMember, TeamReview, TaskStatus } from '../types'
 
 type UnknownRecord = Record<string, unknown>
 
@@ -86,10 +86,67 @@ export const normalizeApplication = (raw: unknown): Application => {
     comment: text(item.comment, item.additional_comment),
     createdAt: text(item.createdAt, item.created_at),
     status: text(item.status, 'submitted') as Application['status'],
+    teamId: text(item.teamId, item.team_id) || undefined,
   }
 }
 
 export const normalizeApplicationList = (raw: unknown): Application[] => {
   const value = unwrap(raw, ['applications', 'items', 'results', 'data'])
   return Array.isArray(value) ? value.map(normalizeApplication) : []
+}
+
+const objectList = (value: unknown): UnknownRecord[] => Array.isArray(value) ? value.filter((item): item is UnknownRecord => Boolean(item) && typeof item === 'object') : []
+
+const normalizeMember = (raw: unknown): TeamMember => {
+  const item = (raw || {}) as UnknownRecord
+  return { name: text(item.name), role: text(item.role), skills: list(item.skills) }
+}
+
+export const normalizeTeam = (raw: unknown): Team => {
+  const item = (unwrap(raw, ['team', 'data']) || {}) as UnknownRecord
+  const rating = (item.rating && typeof item.rating === 'object' ? item.rating : {}) as UnknownRecord
+  return {
+    id: text(item.id, item._id), name: text(item.name, item.teamName), description: text(item.description, item.summary),
+    members: objectList(item.members).map(normalizeMember), skills: list(item.skills, item.teamSkills), technologies: list(item.technologies, item.techStack),
+    projects: objectList(item.projects).map((project) => ({ name: text(project.name), description: text(project.description), url: text(project.url) })),
+    githubUrls: list(item.githubUrls, item.github_urls, item.githubLinks),
+    rating: { average: Number(rating.average ?? 0), reviewsCount: Number(rating.reviewsCount ?? 0) },
+  }
+}
+
+export const normalizeTeamList = (raw: unknown): Team[] => {
+  const value = unwrap(raw, ['teams', 'items', 'results', 'data'])
+  return Array.isArray(value) ? value.map(normalizeTeam) : []
+}
+
+export const normalizeTeamReview = (raw: unknown): TeamReview => {
+  const item = (unwrap(raw, ['review', 'data']) || {}) as UnknownRecord
+  return { id: text(item.id), teamId: text(item.teamId), taskId: text(item.taskId), authorName: text(item.authorName), score: Number(item.score ?? 0), text: text(item.text), createdAt: text(item.createdAt) || undefined }
+}
+export const normalizeTeamReviews = (raw: unknown): TeamReview[] => {
+  const value = unwrap(raw, ['reviews', 'items', 'results', 'data'])
+  return Array.isArray(value) ? value.map(normalizeTeamReview) : []
+}
+
+export const normalizeAssistantPlan = (raw: unknown): AssistantPlan => {
+  const item = (unwrap(raw, ['data']) || {}) as UnknownRecord
+  const plan = (item.plan || {}) as UnknownRecord
+  const architecture = (plan.architecture || {}) as UnknownRecord
+  const level = (value: unknown): 'low' | 'medium' | 'high' => value === 'high' || value === 'low' ? value : 'medium'
+  return {
+    id: text(item.id), taskId: text(item.taskId), teamId: text(item.teamId), createdAt: text(item.createdAt) || undefined,
+    plan: {
+      summary: text(plan.summary),
+      architecture: { overview: text(architecture.overview), components: objectList(architecture.components).map((part) => ({ name: text(part.name), responsibility: text(part.responsibility), technologies: list(part.technologies) })) },
+      milestones: objectList(plan.milestones).map((part) => ({ title: text(part.title), description: text(part.description), deliverable: text(part.deliverable), estimatedHours: Number(part.estimatedHours ?? 0), tasks: list(part.tasks) })),
+      assignments: objectList(plan.assignments).map((part) => ({ memberName: text(part.memberName), role: text(part.role), tasks: list(part.tasks) })),
+      risks: objectList(plan.risks).map((part) => ({ title: text(part.title), probability: level(part.probability), impact: text(part.impact), mitigation: text(part.mitigation) })),
+      firstTasks: objectList(plan.firstTasks).map((part) => ({ title: text(part.title), description: text(part.description), priority: level(part.priority) })),
+      questionsForBusiness: list(plan.questionsForBusiness),
+    },
+  }
+}
+export const normalizeAssistantPlanList = (raw: unknown): AssistantPlan[] => {
+  const value = unwrap(raw, ['plans', 'items', 'results', 'data'])
+  return Array.isArray(value) ? value.map(normalizeAssistantPlan) : []
 }

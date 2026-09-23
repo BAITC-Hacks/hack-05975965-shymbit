@@ -8,6 +8,9 @@ import { HomePage } from './pages/HomePage'
 import { MyTasksPage } from './pages/MyTasksPage'
 import { NotFoundPage } from './pages/NotFoundPage'
 import { TaskPage } from './pages/TaskPage'
+import { TeamsPage } from './pages/TeamsPage'
+import { TeamPage } from './pages/TeamPage'
+import { TeamEditorPage } from './pages/TeamEditorPage'
 
 export default function App() {
   return (
@@ -21,6 +24,10 @@ export default function App() {
         <Route path="tasks/:id/applications" element={<ApplicationsPage />} />
         <Route path="tasks/:id" element={<TaskPage />} />
         <Route path="my-tasks" element={<MyTasksPage />} />
+        <Route path="teams" element={<TeamsPage />} />
+        <Route path="teams/new" element={<TeamEditorPage key="new" />} />
+        <Route path="teams/:id/edit" element={<TeamEditorPage key="edit" />} />
+        <Route path="teams/:id" element={<TeamPage />} />
         <Route path="catalog" element={<Navigate to="/tasks" replace />} />
         <Route path="*" element={<NotFoundPage />} />
       </Route>

@@ -1,6 +1,6 @@
 import { mockApi } from './mockApi'
-import { normalizeApplication, normalizeApplicationList, normalizeQuestions, normalizeTask, normalizeTaskList } from './normalizers'
-import type { Application, ApplicationDraft, ChallengeTask, ClarificationQuestion, TaskDraft } from '../types'
+import { normalizeApplication, normalizeApplicationList, normalizeAssistantPlan, normalizeAssistantPlanList, normalizeQuestions, normalizeTask, normalizeTaskList, normalizeTeam, normalizeTeamList, normalizeTeamReview, normalizeTeamReviews } from './normalizers'
+import type { Application, ApplicationDraft, AssistantPlan, ChallengeTask, ClarificationQuestion, Team, TeamDraft, TeamReview, TeamReviewDraft, TaskDraft } from '../types'
 
 const API_URL = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '')
 const USE_MOCK = import.meta.env.VITE_USE_MOCK_API === 'true'
@@ -17,7 +17,10 @@ const errorMessages: Record<number, string> = {
   401: 'Необходимо войти в систему.',
   403: 'У вас нет доступа к этому действию.',
   404: 'Запрошенные данные не найдены.',
+  409: 'Это действие сейчас недоступно. Проверьте условия и попробуйте снова.',
   500: 'Сервис временно недоступен. Попробуйте позже.',
+  502: 'AI вернул неполный план. Попробуйте ещё раз.',
+  503: 'AI-помощник временно недоступен. Повторите запрос позже.',
 }
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
@@ -92,6 +95,7 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({
         teamName: draft.teamName,
+        ...(draft.teamId ? { teamId: draft.teamId } : {}),
         members: draft.members.split(/[\n,;]+/).map((member) => member.trim()).filter(Boolean),
         solutionDescription: draft.solution,
         technologies: draft.technologies,
@@ -107,6 +111,42 @@ export const api = {
   async updateApplication(id: string, status: Application['status']): Promise<Application> {
     if (USE_MOCK) return mockApi.updateApplication(id, status)
     return normalizeApplication(await request(`/api/applications/${id}`, { method: 'PATCH', body: JSON.stringify({ status }) }))
+  },
+  async getTeams(): Promise<Team[]> {
+    if (USE_MOCK) return mockApi.getTeams()
+    return normalizeTeamList(await request('/api/teams'))
+  },
+  async getTeam(id: string): Promise<Team> {
+    if (USE_MOCK) { const team = await mockApi.getTeam(id); if (!team) throw new ApiError(404, 'Команда не найдена.'); return team }
+    return normalizeTeam(await request(`/api/teams/${id}`))
+  },
+  async createTeam(draft: TeamDraft): Promise<Team> {
+    if (USE_MOCK) return mockApi.createTeam(draft)
+    return normalizeTeam(await request('/api/teams', { method: 'POST', body: JSON.stringify(draft) }))
+  },
+  async updateTeam(id: string, draft: TeamDraft): Promise<Team> {
+    if (USE_MOCK) return mockApi.updateTeam(id, draft)
+    return normalizeTeam(await request(`/api/teams/${id}`, { method: 'PATCH', body: JSON.stringify(draft) }))
+  },
+  async getTeamReviews(teamId: string): Promise<TeamReview[]> {
+    if (USE_MOCK) return mockApi.getTeamReviews(teamId)
+    return normalizeTeamReviews(await request(`/api/teams/${teamId}/reviews`))
+  },
+  async createTeamReview(teamId: string, review: TeamReviewDraft): Promise<TeamReview> {
+    if (USE_MOCK) return mockApi.createTeamReview(teamId, review)
+    return normalizeTeamReview(await request(`/api/teams/${teamId}/reviews`, { method: 'POST', body: JSON.stringify(review) }))
+  },
+  async generateAssistantPlan(taskId: string, teamId: string, focus?: string): Promise<AssistantPlan> {
+    if (USE_MOCK) return mockApi.generateAssistantPlan(taskId, teamId, focus)
+    return normalizeAssistantPlan(await request(`/api/tasks/${taskId}/assistant/plan`, { method: 'POST', body: JSON.stringify({ teamId, ...(focus ? { focus } : {}) }) }))
+  },
+  async getAssistantPlans(taskId: string, teamId: string): Promise<AssistantPlan[]> {
+    if (USE_MOCK) return mockApi.getAssistantPlans(taskId, teamId)
+    return normalizeAssistantPlanList(await request(`/api/tasks/${taskId}/assistant/plans?teamId=${encodeURIComponent(teamId)}`))
+  },
+  async getAssistantPlan(id: string): Promise<AssistantPlan> {
+    if (USE_MOCK) return mockApi.getAssistantPlan(id)
+    return normalizeAssistantPlan(await request(`/api/assistant-plans/${id}`))
   },
 }
 
