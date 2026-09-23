@@ -1,0 +1,54 @@
+/* Снимок новой страницы мягко проявляется над предыдущим — без вспышек и масок. */
+:root[data-theme-motion='native']::view-transition-group(root) {
+  animation-duration: 460ms;
+  animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+:root[data-theme-motion='native']::view-transition-old(root),
+:root[data-theme-motion='native']::view-transition-new(root) {
+  mix-blend-mode: normal;
+}
+
+:root[data-theme-motion='native']::view-transition-old(root) {
+  animation: none;
+  opacity: 1;
+}
+
+:root[data-theme-motion='native']::view-transition-new(root) {
+  animation: theme-reveal 460ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes theme-reveal {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* Применяется только во время явного переключения, не при загрузке приложения. */
+:root[data-theme-motion='fallback'],
+:root[data-theme-motion='fallback'] *,
+:root[data-theme-motion='fallback'] *::before,
+:root[data-theme-motion='fallback'] *::after {
+  transition-property: background-color, color, border-color, box-shadow, fill, stroke, opacity, transform;
+  transition-duration: 460ms;
+  transition-timing-function: ease;
+}
+
+.theme-toggle:disabled {
+  cursor: progress;
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root::view-transition-group(root),
+  :root::view-transition-old(root),
+  :root::view-transition-new(root) {
+    animation: none !important;
+  }
+
+  :root[data-theme-motion='fallback'],
+  :root[data-theme-motion='fallback'] *,
+  :root[data-theme-motion='fallback'] *::before,
+  :root[data-theme-motion='fallback'] *::after {
+    transition: none !important;
+  }
+}

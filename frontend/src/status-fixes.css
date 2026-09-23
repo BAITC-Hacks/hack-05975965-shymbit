@@ -1,9 +1,9 @@
 .badge--submitted {
-  background: #2c271f;
-  color: #d9aa6c;
+  background: var(--accent-surface);
+  color: var(--green);
 }
 
 .badge--reviewed {
-  background: #242a39;
-  color: #aebfea;
+  background: var(--info-bg);
+  color: var(--info-ink);
 }

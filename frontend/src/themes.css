@@ -1,0 +1,148 @@
+/* Общие цвета всех экранов: фон, карточки, формы, статусы и AI-панели. */
+:root {
+  --theme-scheme: dark;
+  --page-bg: #101113;
+  --surface: #181a1d;
+  --surface-soft: #141518;
+  --surface-inset: #121416;
+  --surface-raised: #222428;
+  --surface-hover: #1c1e21;
+  --surface-alt: #252629;
+  --surface-strong: #303135;
+  --accent-surface: #29261f;
+  --accent-panel: #24211c;
+  --accent-border: #65523a;
+  --input-border: #55585e;
+  --track: #39352d;
+  --muted-strong: #cfccc7;
+  --placeholder: #9699a1;
+  --accent-ink: #dfbd8e;
+  --accent-contrast: #101113;
+  --action: #d9aa6c;
+  --action-hover: #e8bf88;
+  --on-action: #191713;
+  --success-bg: #233127;
+  --success-ink: #a5d0ac;
+  --info-bg: #242a39;
+  --info-ink: #aebfea;
+  --danger-bg: #312523;
+  --danger-ink: #edaaa0;
+  --danger-border: #61443c;
+  --subtle-line: #ffffff0e;
+  --strong-line: #ffffff26;
+  --focus-ring: #d9aa6c26;
+  --shadow-soft: #00000026;
+  --backdrop: #000a;
+  --header-bg: #101113f2;
+  --ink: #f1eee8;
+  --muted: #a5a7ae;
+  --green: #d9aa6c;
+  --green-dark: #e8bf88;
+  --line: #303236;
+  --card: var(--surface);
+  --mint: var(--accent-surface);
+  --orange: var(--green);
+  color-scheme: var(--theme-scheme);
+}
+
+:root[data-theme='light'] {
+  --theme-scheme: light;
+  --page-bg: #f6f5f0;
+  --surface: #ffffff;
+  --surface-soft: #efeee8;
+  --surface-inset: #fafaf7;
+  --surface-raised: #ffffff;
+  --surface-hover: #faf8f2;
+  --surface-alt: #eeede7;
+  --surface-strong: #e4e5dd;
+  --accent-surface: #f2e8d6;
+  --accent-panel: #f6efdf;
+  --accent-border: #c3a77e;
+  --input-border: #a8aea2;
+  --track: #e3d5bd;
+  --muted-strong: #51594f;
+  --placeholder: #6c7467;
+  --accent-ink: #795322;
+  --accent-contrast: #ffffff;
+  --action: #d8aa69;
+  --action-hover: #cfa061;
+  --on-action: #262017;
+  --success-bg: #e7f1e8;
+  --success-ink: #2d603c;
+  --info-bg: #e9edf8;
+  --info-ink: #3b5288;
+  --danger-bg: #faeae7;
+  --danger-ink: #9b3d32;
+  --danger-border: #dcb0a8;
+  --subtle-line: #252c2014;
+  --strong-line: #aab09f;
+  --focus-ring: #94682f30;
+  --shadow-soft: #34392814;
+  --backdrop: #23271e66;
+  --header-bg: #f6f5f0f5;
+  --ink: #20241f;
+  --muted: #60675d;
+  --green: #84602e;
+  --green-dark: #6d4b20;
+  --line: #daddd3;
+  --shadow: 0 18px 45px #3439280b;
+}
+
+.button--primary { background: var(--action); color: var(--on-action); }
+.button--primary:hover:not(:disabled) { background: var(--action-hover); color: var(--on-action); }
+::selection { background: var(--action); color: var(--on-action); }
+.skip-link { background: var(--action); color: var(--on-action); }
+.challenge-card__link:hover > span { background: var(--action); color: var(--on-action); }
+.header__actions { display: flex; align-items: center; gap: 22px; }
+.theme-toggle { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 40px; padding: 9px 12px; border: 1px solid var(--line); border-radius: 24px; color: var(--ink); background: var(--surface); font-size: 11px; white-space: nowrap; }
+.theme-toggle:hover { background: var(--surface-alt); border-color: var(--accent-border); }
+.theme-toggle svg { flex: none; color: var(--green); width: 16px; height: 16px; }
+.field input:focus, .field textarea:focus, .field select:focus, .question__body textarea:focus, .tag-input:focus-within { border-color: var(--green); box-shadow: 0 0 0 3px var(--focus-ring); }
+.directory-page--teams .team-card .chip { background: var(--surface-alt); }
+
+/* Светлая главная сохраняет фотографию, но выносит её в отдельный кадр. */
+[data-theme='light'] .sana-hero { width: min(1200px, calc(100% - 80px)); margin-inline: auto; overflow: visible; }
+[data-theme='light'] .sana-hero__shade { display: none; }
+[data-theme='light'] .sana-hero__image { inset: 76px 0 auto auto; width: 42%; height: 425px; border-radius: 100px 8px 8px 8px; object-position: 77% center; opacity: 1; }
+[data-theme='light'] .sana-hero__inner { width: 100%; min-height: 680px; padding-top: 76px; }
+[data-theme='light'] .sana-hero__copy { max-width: 54%; }
+[data-theme='light'] .sana-hero h1 { font-size: clamp(48px, 4.7vw, 68px); }
+[data-theme='light'] .hero-line-break { display: block; }
+[data-theme='light'] .sana-hero__actions { gap: 20px; flex-wrap: wrap; }
+[data-theme='light'] .sana-hero__foot { padding-top: 35px; }
+
+@media(max-width:1150px) {
+  .header__actions { gap: 15px; }
+  .nav { gap: 18px; }
+  .nav .button { margin-left: 0; }
+  .theme-toggle { padding-inline: 10px; }
+}
+@media(max-width:1000px) {
+  [data-theme='light'] .sana-hero { width: calc(100% - 48px); }
+  [data-theme='light'] .sana-hero h1 { font-size: 50px; }
+  [data-theme='light'] .sana-hero__copy { max-width: 52%; }
+}
+@media(max-width:850px) {
+  .header__actions { gap: 10px; }
+  .theme-toggle { min-height: 42px; }
+  .nav { background: var(--surface); }
+}
+@media(max-width:800px) {
+  [data-theme='light'] .sana-hero { display: flex; flex-direction: column; }
+  [data-theme='light'] .sana-hero__inner { display: contents; }
+  [data-theme='light'] .sana-hero__copy { max-width: 100%; padding-top: 48px; order: 1; }
+  [data-theme='light'] .sana-hero__image { position: relative; inset: auto; order: 2; width: 100%; height: 320px; margin-top: 35px; border-top-left-radius: 90px; object-position: 76% 55%; }
+  [data-theme='light'] .sana-hero__foot { order: 3; padding-block: 28px; }
+  [data-theme='light'] .sana-hero__actions { flex-direction: row; align-items: center; }
+}
+@media(max-width:600px) {
+  [data-theme='light'] .sana-hero { width: calc(100% - 40px); }
+  [data-theme='light'] .sana-hero h1 { font-size: clamp(41px, 11.5vw, 60px); }
+  [data-theme='light'] .sana-hero__image { height: 250px; margin-top: 28px; border-top-left-radius: 65px; }
+  [data-theme='light'] .sana-hero__caption { max-width: none; }
+}
+@media(max-width:380px) {
+  .theme-toggle span { display: none; }
+  .theme-toggle { width: 42px; padding: 9px; }
+  .header__actions { gap: 7px; }
+}
