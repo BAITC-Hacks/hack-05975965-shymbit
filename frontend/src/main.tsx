@@ -9,6 +9,7 @@ import './hub.css'
 import './sana.css'
 import './catalog.css'
 import './themes.css'
+import './catalog-refresh.css'
 import './motion.css'
 import './theme-motion.css'
 

@@ -1,15 +1,20 @@
-import { ArrowUpRight, CalendarDays } from 'lucide-react'
+import { ArrowUpRight, CalendarDays, Code2, GraduationCap, Network, PenTool } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import type { ChallengeTask } from '../types'
+import { getTaskDirections, taskDirections } from '../lib/taskDirections'
 import { TaskStatusBadge } from './StatusBadge'
 
-export function TaskCard({ task, showStatus = false, index }: { task: ChallengeTask; showStatus?: boolean; index?: number }) {
+export function TaskCard({ task, showStatus = false }: { task: ChallengeTask; showStatus?: boolean; index?: number }) {
   const readiness = Math.max(0, Math.min(100, Math.round(task.readinessScore || 0)))
   const tags = Array.from(new Set([...task.skills, ...task.technologies])).slice(0, 4)
+  const direction = getTaskDirections(task)[0]
+  const DirectionIcon = direction === 'ai' ? Network : direction === 'web' ? Code2 : direction === 'design' ? PenTool : GraduationCap
+  const category = taskDirections.find((item) => item.value === direction)?.label || 'Междисциплинарная'
   return (
     <article className="challenge-card">
       <div className="challenge-card__top">
-        <span className="challenge-card__category">{index !== undefined && <span>{String(index).padStart(2, '0')}</span>}{task.skills[0] || 'Междисциплинарная задача'}</span>
+        <span className="challenge-card__icon" aria-hidden="true"><DirectionIcon size={22} /></span>
+        <span className="challenge-card__category">{category}</span>
         {showStatus && <TaskStatusBadge status={task.status} />}
       </div>
       <span className="challenge-card__organization">{task.organization}</span>
@@ -22,7 +27,7 @@ export function TaskCard({ task, showStatus = false, index }: { task: ChallengeT
         <span><CalendarDays size={15} />{task.deadline || 'Срок уточняется'}</span>
         <span title="Заполненность брифа задачи">Бриф готов на <strong>{readiness}%</strong></span>
       </div>
-      <Link className="challenge-card__link" to={`/tasks/${task.id}`}>{showStatus ? 'Открыть задачу' : 'Изучить вызов'}<span><ArrowUpRight size={19} /></span></Link>
+      <Link className="challenge-card__link" to={`/tasks/${task.id}`}>{showStatus ? 'Открыть задачу' : 'Посмотреть задачу'}<ArrowUpRight size={19} /></Link>
     </article>
   )
 }
