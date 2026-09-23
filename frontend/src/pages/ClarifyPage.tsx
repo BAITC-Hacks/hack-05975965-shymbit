@@ -17,17 +17,32 @@ export function ClarifyPage() {
   const [generating, setGenerating] = useState(false)
   const [error, setError] = useState('')
 
-  const loadQuestions = useCallback(async () => {
+  const applyQuestions = useCallback((result: ClarificationQuestion[]) => {
+    setQuestions(result)
+    setAnswers(Object.fromEntries(result.map((question) => [question.id, question.answer || ''])))
+  }, [])
+
+  const requestQuestions = useCallback(async () => {
     setLoading(true); setError('')
     try {
       const result = await api.clarifyTask(id)
-      setQuestions(result)
-      setAnswers(Object.fromEntries(result.map((question) => [question.id, question.answer || ''])))
+      applyQuestions(result)
     } catch (loadError) { setError(getErrorMessage(loadError)) }
     finally { setLoading(false) }
-  }, [id])
+  }, [id, applyQuestions])
 
-  useEffect(() => { void loadQuestions() }, [loadQuestions])
+  useEffect(() => {
+    const loadExisting = async () => {
+      setLoading(true); setError('')
+      try {
+        const task = await api.getTask(id)
+        if (task.clarificationQuestions?.length) applyQuestions(task.clarificationQuestions)
+        else applyQuestions(await api.clarifyTask(id))
+      } catch (loadError) { setError(getErrorMessage(loadError)) }
+      finally { setLoading(false) }
+    }
+    void loadExisting()
+  }, [id, applyQuestions])
 
   const save = async () => {
     setSaving(true)
@@ -50,11 +65,11 @@ export function ClarifyPage() {
   return <div className="page page--form"><div className="container container--narrow">
     <Link className="back-link" to={`/tasks/${id}/edit`}><ArrowLeft size={17} />Вернуться к описанию</Link>
     <div className="page-heading"><span className="pill"><Sparkles size={15} />Шаг 2 из 3</span><h1>Уточним важные детали</h1><p>AI проанализировал описание и подготовил вопросы. Ответы сделают карточку понятной для команд.</p></div>
-    {loading ? <Loader label="AI анализирует задачу…" /> : error ? <ErrorState message={error} retry={loadQuestions} /> : (
+    {loading ? <Loader label="AI анализирует задачу…" /> : error ? <ErrorState message={error} retry={requestQuestions} /> : (
       <form className="form-card clarification" onSubmit={submit}>
         <div className="ai-note"><span><Bot size={24} /></span><div><strong>Вопросы от AI-помощника</strong><p>Отвечайте конкретно, но можно коротко. Ответы сохраняются перед генерацией.</p></div></div>
         {questions.map((question, index) => <label className="question" key={question.id}><span className="question__number">{index + 1}</span><span className="question__body"><strong>{question.text}{question.required && <b> *</b>}</strong><textarea rows={3} value={answers[question.id] || ''} onChange={(event) => setAnswers((current) => ({ ...current, [question.id]: event.target.value }))} placeholder="Введите ваш ответ…" /></span></label>)}
-        <div className="form-actions form-actions--spread"><button type="button" className="button button--ghost" onClick={loadQuestions} disabled={saving || generating}><RefreshCw size={18} />Обновить вопросы</button><div><button type="button" className="button button--secondary" onClick={save} disabled={saving || generating}><Save size={18} />{saving ? 'Сохраняем…' : 'Сохранить ответы'}</button><button className="button button--primary" type="submit" disabled={saving || generating}>{generating ? <><span className="button-spinner" />AI формирует карточку…</> : <>Сформировать карточку<ArrowRight size={18} /></>}</button></div></div>
+        <div className="form-actions form-actions--spread"><button type="button" className="button button--ghost" onClick={requestQuestions} disabled={saving || generating}><RefreshCw size={18} />Сформировать вопросы заново</button><div><button type="button" className="button button--secondary" onClick={save} disabled={saving || generating}><Save size={18} />{saving ? 'Сохраняем…' : 'Сохранить ответы'}</button><button className="button button--primary" type="submit" disabled={saving || generating}>{generating ? <><span className="button-spinner" />AI формирует карточку…</> : <>Сформировать карточку<ArrowRight size={18} /></>}</button></div></div>
       </form>
     )}
   </div></div>

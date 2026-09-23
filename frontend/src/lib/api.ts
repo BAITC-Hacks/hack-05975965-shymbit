@@ -42,23 +42,10 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   return body as T
 }
 
-const payload = (draft: TaskDraft) => ({
-  title: draft.title,
-  short_description: draft.shortDescription,
-  organization: draft.organization,
-  contact_person: draft.contactPerson,
-  desired_result: draft.desiredResult,
-  available_data: draft.availableData,
-  constraints: draft.constraints,
-  deadline: draft.deadline,
-  skills: draft.skills,
-  technologies: draft.technologies,
-})
-
 export const api = {
-  async getTasks(): Promise<ChallengeTask[]> {
+  async getTasks(status: ChallengeTask['status'] | 'all' = 'published'): Promise<ChallengeTask[]> {
     if (USE_MOCK) return mockApi.getTasks()
-    return normalizeTaskList(await request('/api/tasks'))
+    return normalizeTaskList(await request(`/api/tasks?status=${encodeURIComponent(status)}`))
   },
   async getTask(id: string): Promise<ChallengeTask> {
     if (USE_MOCK) {
@@ -70,7 +57,7 @@ export const api = {
   },
   async createTask(draft: TaskDraft): Promise<ChallengeTask> {
     if (USE_MOCK) return mockApi.createTask(draft)
-    return normalizeTask(await request('/api/tasks', { method: 'POST', body: JSON.stringify(payload(draft)) }))
+    return normalizeTask(await request('/api/tasks', { method: 'POST', body: JSON.stringify(draft) }))
   },
   async updateTask(id: string, draft: Partial<TaskDraft>): Promise<ChallengeTask> {
     if (USE_MOCK) return mockApi.updateTask(id, draft)
@@ -84,7 +71,7 @@ export const api = {
     if (USE_MOCK) { await mockApi.saveAnswers(); return }
     await request(`/api/tasks/${id}/answers`, {
       method: 'POST',
-      body: JSON.stringify({ answers: Object.entries(answers).map(([question_id, answer]) => ({ question_id, answer })) }),
+      body: JSON.stringify({ answers: Object.entries(answers).map(([questionId, answer]) => ({ questionId, answer })) }),
     })
   },
   async generateTask(id: string): Promise<ChallengeTask> {
@@ -93,7 +80,7 @@ export const api = {
   },
   async publishTask(id: string): Promise<ChallengeTask> {
     if (USE_MOCK) return mockApi.publishTask(id)
-    return normalizeTask(await request(`/api/tasks/${id}/publish`, { method: 'POST' }))
+    return normalizeTask(await request(`/api/tasks/${id}/publish`, { method: 'POST', body: JSON.stringify({ confirm: true }) }))
   },
   async archiveTask(id: string): Promise<ChallengeTask> {
     if (USE_MOCK) return mockApi.archiveTask(id)
@@ -103,7 +90,14 @@ export const api = {
     if (USE_MOCK) return mockApi.createApplication(taskId, draft)
     return normalizeApplication(await request(`/api/tasks/${taskId}/applications`, {
       method: 'POST',
-      body: JSON.stringify({ ...draft, team_name: draft.teamName }),
+      body: JSON.stringify({
+        teamName: draft.teamName,
+        members: draft.members.split(/[\n,;]+/).map((member) => member.trim()).filter(Boolean),
+        solutionDescription: draft.solution,
+        technologies: draft.technologies,
+        contact: draft.contact,
+        comment: draft.comment || undefined,
+      }),
     }))
   },
   async getApplications(taskId: string): Promise<Application[]> {

@@ -4,6 +4,7 @@ import { BrowserRouter } from 'react-router-dom'
 import App from './App'
 import { ToastProvider } from './components/Toast'
 import './styles.css'
+import './status-fixes.css'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

@@ -1,6 +1,6 @@
 import { Archive, ArrowLeft, Check, ClipboardList, Edit3, RefreshCw, Send, Users } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useParams } from 'react-router-dom'
 import { ErrorState, Loader } from '../components/AsyncState'
 import { ApplicationForm } from '../components/ApplicationForm'
 import { ReadinessScore } from '../components/ReadinessScore'
@@ -19,7 +19,6 @@ const blocks: Array<{ key: keyof ChallengeTask; title: string }> = [
 
 export function TaskPage() {
   const { id = '' } = useParams()
-  const navigate = useNavigate()
   const { showToast } = useToast()
   const [task, setTask] = useState<ChallengeTask | null>(null)
   const [loading, setLoading] = useState(true)

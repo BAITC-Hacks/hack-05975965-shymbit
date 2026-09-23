@@ -25,28 +25,30 @@ const list = (...values: unknown[]): string[] => {
 
 export const normalizeTask = (raw: unknown): ChallengeTask => {
   const item = (unwrap(raw, ['task', 'data']) || {}) as UnknownRecord
+  const card = item.card && typeof item.card === 'object' ? item.card as UnknownRecord : {}
   return {
     id: text(item.id, item._id, item.task_id),
-    title: text(item.title, item.name, 'Без названия'),
-    shortDescription: text(item.shortDescription, item.short_description, item.summary, item.description),
+    title: text(card.title, item.title, item.name, 'Без названия'),
+    shortDescription: text(item.shortDescription, item.short_description, item.summary, card.description, item.description),
     organization: text(item.organization, item.company, 'Организация не указана'),
     contactPerson: text(item.contactPerson, item.contact_person),
     desiredResult: text(item.desiredResult, item.desired_result),
-    availableData: text(item.availableData, item.available_data),
-    constraints: text(item.constraints, item.limitations),
-    deadline: text(item.deadline, item.due_date, item.timeline),
-    skills: list(item.skills, item.required_skills),
-    technologies: list(item.technologies, item.tech_stack),
+    availableData: text(card.availableData, item.availableData, item.available_data),
+    constraints: text(card.constraints, item.constraints, item.limitations),
+    deadline: text(card.deadline, item.deadline, item.due_date, item.timeline),
+    skills: list(card.skills, item.skills, item.required_skills),
+    technologies: list(card.technologies, item.technologies, item.tech_stack),
     status: text(item.status, 'draft') as TaskStatus,
-    problem: text(item.problem),
-    goal: text(item.goal),
-    expectedResult: text(item.expectedResult, item.expected_result),
-    description: text(item.description, item.detailed_description),
-    requirements: text(item.requirements),
-    successCriteria: text(item.successCriteria, item.success_criteria),
+    problem: text(card.problem, item.problem),
+    goal: text(card.goal, item.goal),
+    expectedResult: text(card.expectedResult, item.expectedResult, item.expected_result),
+    description: text(card.description, item.description, item.detailed_description),
+    requirements: text(card.requirements, item.requirements),
+    successCriteria: text(card.successCriteria, item.successCriteria, item.success_criteria),
     readinessScore: Number(item.readinessScore ?? item.readiness_score ?? item.readiness_rating ?? 0),
     readinessExplanation: text(item.readinessExplanation, item.readiness_explanation, item.rating_explanation),
     createdAt: text(item.createdAt, item.created_at),
+    clarificationQuestions: normalizeQuestions(item.clarificationQuestions),
   }
 }
 
@@ -78,12 +80,12 @@ export const normalizeApplication = (raw: unknown): Application => {
     taskId: text(item.taskId, item.task_id),
     teamName: text(item.teamName, item.team_name),
     members: Array.isArray(item.members) ? item.members.join(', ') : text(item.members, item.participants),
-    solution: text(item.solution, item.solution_description),
+    solution: text(item.solution, item.solutionDescription, item.solution_description),
     technologies: list(item.technologies, item.tech_stack),
     contact: text(item.contact),
     comment: text(item.comment, item.additional_comment),
     createdAt: text(item.createdAt, item.created_at),
-    status: text(item.status, 'pending') as Application['status'],
+    status: text(item.status, 'submitted') as Application['status'],
   }
 }
 

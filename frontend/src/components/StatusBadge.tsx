@@ -9,8 +9,8 @@ export const taskStatusLabels: Record<TaskStatus, string> = {
 }
 
 export const applicationStatusLabels: Record<ApplicationStatus, string> = {
-  pending: 'Новый',
-  reviewing: 'На рассмотрении',
+  submitted: 'Новый',
+  reviewed: 'На рассмотрении',
   accepted: 'Принят',
   rejected: 'Отклонён',
 }

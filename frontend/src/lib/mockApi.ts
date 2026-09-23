@@ -37,7 +37,7 @@ const tasks: ChallengeTask[] = [
   },
 ]
 
-let applications: Application[] = []
+const applications: Application[] = []
 
 const makeDraft = (draft: TaskDraft): ChallengeTask => ({
   ...draft,
@@ -86,7 +86,7 @@ export const mockApi = {
   async publishTask(id: string) { return this.updateTask(id, { status: 'published' }) },
   async archiveTask(id: string) { return this.updateTask(id, { status: 'archived' }) },
   async createApplication(taskId: string, draft: ApplicationDraft) {
-    const application: Application = { ...draft, id: crypto.randomUUID(), taskId, createdAt: new Date().toISOString(), status: 'pending' }
+    const application: Application = { ...draft, id: crypto.randomUUID(), taskId, createdAt: new Date().toISOString(), status: 'submitted' }
     applications.unshift(application); await wait(); return application
   },
   async getApplications(taskId: string) { await wait(); return applications.filter((item) => item.taskId === taskId) },

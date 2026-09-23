@@ -1,0 +1,9 @@
+.badge--submitted {
+  background: #fff5dc;
+  color: #a96c1d;
+}
+
+.badge--reviewed {
+  background: #e8f2ff;
+  color: #4673a7;
+}

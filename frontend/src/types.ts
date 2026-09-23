@@ -22,6 +22,7 @@ export interface ChallengeTask {
   readinessScore?: number
   readinessExplanation?: string
   createdAt?: string
+  clarificationQuestions?: ClarificationQuestion[]
 }
 
 export interface TaskDraft {
@@ -44,7 +45,7 @@ export interface ClarificationQuestion {
   answer?: string
 }
 
-export type ApplicationStatus = 'pending' | 'reviewing' | 'accepted' | 'rejected'
+export type ApplicationStatus = 'submitted' | 'reviewed' | 'accepted' | 'rejected'
 
 export interface Application {
   id: string

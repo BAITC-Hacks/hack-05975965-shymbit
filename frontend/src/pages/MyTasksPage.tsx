@@ -12,7 +12,7 @@ export function MyTasksPage() {
   const [error, setError] = useState('')
   const load = useCallback(async () => {
     setLoading(true); setError('')
-    try { setTasks(await api.getTasks()) } catch (loadError) { setError(getErrorMessage(loadError)) }
+    try { setTasks(await api.getTasks('all')) } catch (loadError) { setError(getErrorMessage(loadError)) }
     finally { setLoading(false) }
   }, [])
   useEffect(() => { void load() }, [load])
