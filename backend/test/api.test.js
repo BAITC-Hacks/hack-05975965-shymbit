@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { createApp } from "../src/app.js";
+import { createAIService } from "../src/services/aiService.js";
 import { createJsonStore } from "../src/store.js";
 
 const fakeAI = {
@@ -399,4 +400,32 @@ test("старое JSON-хранилище мигрирует без потер�
   assert.equal(persisted.teams.length, 12);
   assert.deepEqual(persisted.reviews, []);
   assert.deepEqual(persisted.assistantPlans, []);
+});
+
+test("AI-адаптер сообщает о некорректном JSON, таймауте и отказе API без утечки ключа", async (t) => {
+  const originalFetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = originalFetch; });
+  const service = createAIService({
+    aiApiKey: "test-key-that-must-not-appear-in-errors",
+    aiBaseUrl: "https://ai.example.test/v1",
+    aiModel: "test-model",
+    aiTimeoutMs: 100
+  });
+
+  globalThis.fetch = async () => new Response(JSON.stringify({
+    choices: [{ message: { content: "это не JSON" } }]
+  }), { status: 200, headers: { "Content-Type": "application/json" } });
+  await assert.rejects(service.generateQuestions({}), /неподдерживаемом формате/);
+
+  globalThis.fetch = async () => {
+    throw Object.assign(new Error("таймаут"), { name: "TimeoutError" });
+  };
+  await assert.rejects(service.generateQuestions({}), /не ответил вовремя/);
+
+  globalThis.fetch = async () => new Response("{}", { status: 401 });
+  await assert.rejects(service.generateQuestions({}), (error) => {
+    assert.match(error.message, /AI API вернул ошибку/);
+    assert.equal(error.message.includes("test-key-that-must-not-appear-in-errors"), false);
+    return true;
+  });
 });
