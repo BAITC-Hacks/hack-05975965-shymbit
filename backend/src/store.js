@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
+import { isDeepStrictEqual } from "node:util";
 
 const emptyDatabase = () => ({
   tasks: [],
@@ -32,12 +33,18 @@ export async function createJsonStore(filePath) {
     }
   }
 
-  if (needsMigration) await fs.writeFile(filePath, JSON.stringify(database, null, 2));
+  const persist = async () => {
+    const temporaryPath = `${filePath}.${randomUUID()}.tmp`;
+    try {
+      await fs.writeFile(temporaryPath, JSON.stringify(database, null, 2), { flag: "wx" });
+      await fs.rename(temporaryPath, filePath);
+    } finally {
+      await fs.rm(temporaryPath, { force: true });
+    }
+  };
+  if (needsMigration) await persist();
 
   let writeQueue = Promise.resolve();
-  const persist = async () => {
-    await fs.writeFile(filePath, JSON.stringify(database, null, 2));
-  };
   const mutate = (operation) => {
     const pending = writeQueue.then(async () => {
       const previousState = JSON.stringify(database);
@@ -86,11 +93,18 @@ export async function createJsonStore(filePath) {
       return read(() => database.tasks.find((task) => task.id === id) || null);
     },
 
-    updateTask(id, patch) {
+    updateTask(id, patch, expectedTask) {
       return mutate(() => {
         const task = database.tasks.find((item) => item.id === id);
         if (!task) return null;
-        Object.assign(task, patch, { updatedAt: new Date().toISOString() });
+        // Проверяем снимок внутри очереди, чтобы долгий запрос AI не затёр новые данные.
+        if (expectedTask && !isDeepStrictEqual(task, expectedTask)) {
+          const error = new Error("Задача была изменена другим запросом. Обновите данные и повторите действие.");
+          error.status = 409;
+          throw error;
+        }
+        const changes = typeof patch === "function" ? patch(clone(task)) : patch;
+        if (changes) Object.assign(task, changes, { updatedAt: new Date().toISOString() });
         return task;
       });
     },

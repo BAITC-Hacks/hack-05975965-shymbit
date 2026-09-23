@@ -188,6 +188,11 @@ export function createApp({ store, aiService }) {
       if (deadlineBefore && (!card.deadline || card.deadline > deadlineBefore)) return false;
       return true;
     });
+    if (requestedStatus === "published" || requestedStatus === "all") {
+      const publicationTime = (task) => Date.parse(task.publishedAt) || 0;
+      result.sort((left, right) => publicationTime(right) - publicationTime(left)
+        || left.id.localeCompare(right.id));
+    }
     response.json({ items: result, total: result.length });
   }));
 
@@ -203,7 +208,7 @@ export function createApp({ store, aiService }) {
       throw error;
     }
     const patch = parseBody(taskPatchSchema, request.body);
-    response.json(await store.updateTask(task.id, patch));
+    response.json(await store.updateTask(task.id, patch, task));
   }));
 
   app.post("/api/tasks/:id/clarify", asyncHandler(async (request, response) => {
@@ -222,7 +227,7 @@ export function createApp({ store, aiService }) {
     const updated = await store.updateTask(task.id, {
       clarificationQuestions,
       status: "needs_clarification"
-    });
+    }, task);
     response.json({ questions: updated.clarificationQuestions, task: updated });
   }));
 
@@ -240,7 +245,7 @@ export function createApp({ store, aiService }) {
       ...item,
       answer: answersById.has(item.id) ? answersById.get(item.id) : item.answer
     }));
-    const updated = await store.updateTask(task.id, { clarificationQuestions });
+    const updated = await store.updateTask(task.id, { clarificationQuestions }, task);
     response.json(updated);
   }));
 
@@ -258,7 +263,7 @@ export function createApp({ store, aiService }) {
       readinessScore: readiness.score,
       readinessExplanation: readiness.explanation,
       status: readiness.status
-    });
+    }, task);
     response.json({
       task: updated,
       card: updated.card,
@@ -277,14 +282,14 @@ export function createApp({ store, aiService }) {
       error.status = 400;
       throw error;
     }
-    if (task.status !== "ready" || !task.card || task.readinessScore < 75) {
-      const error = new Error("Задача ещё недостаточно готова к публикации.");
-      error.status = 409;
-      throw error;
-    }
-    const updated = await store.updateTask(task.id, {
-      status: "published",
-      publishedAt: new Date().toISOString()
+    const updated = await store.updateTask(task.id, (current) => {
+      if (current.status === "published") return null;
+      if (current.status !== "ready" || !current.card || current.readinessScore < 75) {
+        const error = new Error("Задача ещё недостаточно готова к публикации.");
+        error.status = 409;
+        throw error;
+      }
+      return { status: "published", publishedAt: new Date().toISOString() };
     });
     response.json(updated);
   }));
