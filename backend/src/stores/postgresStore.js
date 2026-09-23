@@ -37,6 +37,38 @@ export async function createPostgresStore(config) {
   return {
     close: () => pool.end(),
     async checkHealth() { await query('SELECT 1'); },
+    createUser(data) {
+      return transaction(pool, async (client) => {
+        const result = await client.query(`INSERT INTO users(id,name,email,role,password_hash,created_at)
+          VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(email) DO NOTHING RETURNING *`,
+        [randomUUID(), data.name, data.email, data.role, data.passwordHash, now()]);
+        if (!result.rowCount) throw storageError('Аккаунт с такой почтой уже существует.', 409);
+        return decode('users', result.rows[0]);
+      });
+    },
+    getUser: (id) => get('users', id),
+    async findUserByEmail(email) { return decode('users', (await query('SELECT * FROM users WHERE email=$1', [email])).rows[0]); },
+    createSession(data) {
+      return transaction(pool, async (client) => {
+        await client.query('DELETE FROM sessions WHERE expires_at <= now()');
+        return insertRecord(client, 'sessions', data);
+      });
+    },
+    async getSession(hash) { return decode('sessions', (await query('SELECT * FROM sessions WHERE token_hash=$1', [hash])).rows[0]); },
+    async deleteSession(hash) { await query('DELETE FROM sessions WHERE token_hash=$1', [hash]); },
+    assignLegacyOwner(collection, id, ownerId) {
+      const role = { tasks: 'business', teams: 'student', applications: 'student' }[collection];
+      if (!role || !validId(id) || !validId(ownerId)) throw storageError('Некорректный объект или владелец.');
+      return transaction(pool, async (client) => {
+        const user = await client.query('SELECT role FROM users WHERE id=$1', [ownerId]);
+        if (user.rows[0]?.role !== role) throw storageError('Роль аккаунта не соответствует объекту.');
+        const result = await client.query(`UPDATE ${collection} SET owner_id=$2, updated_at=$3
+          ${collection === 'tasks' ? ', version=version+1' : ''} WHERE id=$1 AND owner_id IS NULL RETURNING *`, [id, ownerId, now()]);
+        if (!result.rowCount) throw storageError('Объект не найден или уже имеет владельца.');
+        await insertRecord(client, 'ownership_migrations', { collection, id, ownerId, createdAt: now() });
+        return decode(collection, result.rows[0]);
+      });
+    },
     createTask(data) {
       const date = now();
       return transaction(pool, (client) => insertRecord(client, 'tasks', {
@@ -69,7 +101,7 @@ export async function createPostgresStore(config) {
         return insertRecord(client, 'applications', { ...data, id: randomUUID(), status: 'submitted', createdAt: date, updatedAt: date });
       });
     },
-    listApplications: (taskId) => validId(taskId) ? list('applications', 'WHERE task_id=$1', [taskId]) : Promise.resolve([]),
+    listApplications: (taskId) => !taskId ? list('applications') : validId(taskId) ? list('applications', 'WHERE task_id=$1', [taskId]) : Promise.resolve([]),
     getApplication: (id) => get('applications', id),
     async updateApplication(id, patch) {
       if (!validId(id)) return null;
@@ -87,9 +119,13 @@ export async function createPostgresStore(config) {
     },
     async listTeams() { return (await query(`${teamSelect} ORDER BY t.created_at, t.id`)).rows.map((row) => decode('teams', row)); },
     getTeam: (id) => get('teams', id),
-    async updateTeam(id, patch) {
+    async updateTeam(id, patch, expectedTeam) {
       if (!validId(id)) return null;
       return transaction(pool, async (client) => {
+        const locked = await client.query('SELECT id FROM teams WHERE id=$1 FOR UPDATE', [id]);
+        if (!locked.rowCount) return null;
+        const current = decode('teams', (await client.query(`${teamSelect} WHERE t.id=$1`, [id])).rows[0]);
+        if (expectedTeam && !isDeepStrictEqual(current, expectedTeam)) throw storageError('Профиль изменился. Обновите данные.');
         const updated = await updateRecord(client, 'teams', id, { ...patch, updatedAt: now() });
         if (!updated) return null;
         return decode('teams', (await client.query(`${teamSelect} WHERE t.id=$1`, [id])).rows[0]);
@@ -102,9 +138,9 @@ export async function createPostgresStore(config) {
         const accepted = await client.query("SELECT id FROM applications WHERE task_id=$1 AND team_id=$2 AND status='accepted'", [data.taskId, data.teamId]);
         if (!accepted.rowCount) throw storageError('Оставить отзыв можно после принятия отклика этой команды.');
         const normalizedAuthor = data.authorName.trim().toLocaleLowerCase();
-        const result = await client.query(`INSERT INTO reviews(id,task_id,team_id,author_name,normalized_author,score,text,created_at)
-          VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT (team_id,task_id,normalized_author) DO NOTHING RETURNING *`,
-        [randomUUID(), data.taskId, data.teamId, data.authorName, normalizedAuthor, data.score, data.text, now()]);
+        const result = await client.query(`INSERT INTO reviews(id,task_id,team_id,author_name,normalized_author,score,text,created_at,author_id)
+          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT DO NOTHING RETURNING *`,
+        [randomUUID(), data.taskId, data.teamId, data.authorName, normalizedAuthor, data.score, data.text, now(), data.authorId || null]);
         if (!result.rowCount) return null;
         await client.query('UPDATE teams SET updated_at=$2 WHERE id=$1', [data.teamId, now()]);
         return decode('reviews', result.rows[0]);

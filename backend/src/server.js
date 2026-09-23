@@ -5,7 +5,9 @@ import { createStore } from "./stores/index.js";
 
 try {
   const store = await createStore(config);
-  const app = createApp({ store, aiService: createAIService(config), allowedOrigins: config.allowedOrigins, production: config.nodeEnv === 'production' });
+  const app = createApp({ store, aiService: createAIService(config), allowedOrigins: config.allowedOrigins,
+    production: config.nodeEnv === 'production', importLimits: config.importLimits,
+    aiRequestLimit: config.aiRequestLimit, aiConcurrency: config.aiConcurrency, trustProxy: config.trustProxy });
   const server = app.listen(config.port, '0.0.0.0', () => {
     console.log(`AI Sana Challenge Hub backend запущен на порту ${config.port}.`);
   });

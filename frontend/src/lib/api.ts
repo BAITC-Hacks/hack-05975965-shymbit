@@ -1,4 +1,6 @@
 import { mockApi } from './mockApi'
+import { getSession, setSession, type Session, type User } from './session'
+import type { ImportResult } from '../types'
 import { normalizeApplication, normalizeApplicationList, normalizeAssistantPlan, normalizeAssistantPlanList, normalizeQuestions, normalizeTask, normalizeTaskList, normalizeTeam, normalizeTeamList, normalizeTeamReview, normalizeTeamReviews } from './normalizers'
 import type { Application, ApplicationDraft, AssistantPlan, ChallengeTask, ClarificationQuestion, Team, TeamDraft, TeamReview, TeamReviewDraft, TaskDraft } from '../types'
 
@@ -28,7 +30,8 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   try {
     response = await fetch(`${API_URL}${path}`, {
       ...options,
-      headers: { 'Content-Type': 'application/json', ...options.headers },
+      headers: { ...(options.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }),
+        ...(getSession() ? { Authorization: `Bearer ${getSession()!.token}` } : {}), ...options.headers },
     })
   } catch {
     throw new ApiError(0, 'Не удалось связаться с сервером. Проверьте подключение и повторите попытку.')
@@ -37,15 +40,37 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const contentType = response.headers.get('content-type') || ''
   const body = contentType.includes('application/json') ? await response.json() : await response.text()
   if (!response.ok) {
+    if (response.status === 401 && !path.startsWith('/api/auth/login')) setSession(null)
     const backendMessage = typeof body === 'object' && body
       ? (body.message || body.detail || body.error)
       : undefined
     throw new ApiError(response.status, String(backendMessage || errorMessages[response.status] || 'Произошла непредвиденная ошибка.'))
   }
+  if (body && typeof body === 'object' && response.headers.get('etag')) {
+    body.__etag = response.headers.get('etag')
+    if (body.task) body.task.__etag = body.__etag
+  }
   return body as T
 }
 
 export const api = {
+  async register(data: { name: string; email: string; password: string; role: User['role'] }) {
+    const session = await request<Session>('/api/auth/register', { method: 'POST', body: JSON.stringify(data) })
+    setSession(session); return session.user
+  },
+  async login(email: string, password: string) {
+    const session = await request<Session>('/api/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) })
+    setSession(session); return session.user
+  },
+  async logout() { try { await request('/api/auth/logout', { method: 'POST' }) } finally { setSession(null) } },
+  async me() { return (await request<{ user: User }>('/api/auth/me')).user },
+  async getMyTeams(): Promise<Team[]> { return normalizeTeamList(await request('/api/me/teams')) },
+  async getMyApplications(): Promise<Application[]> { return normalizeApplicationList(await request('/api/me/applications')) },
+  async extractDocument(file: File, targetType: 'task' | 'team', targetId?: string): Promise<ImportResult> {
+    const body = new FormData(); body.append('file', file); body.append('targetType', targetType)
+    if (targetId) body.append('targetId', targetId)
+    return request('/api/imports/extract', { method: 'POST', body })
+  },
   async getTasks(status: ChallengeTask['status'] | 'all' = 'published'): Promise<ChallengeTask[]> {
     if (USE_MOCK) return mockApi.getTasks(status)
     return normalizeTaskList(await request(`/api/tasks?status=${encodeURIComponent(status)}`))
@@ -62,20 +87,22 @@ export const api = {
     if (USE_MOCK) return mockApi.createTask(draft)
     return normalizeTask(await request('/api/tasks', { method: 'POST', body: JSON.stringify(draft) }))
   },
-  async updateTask(id: string, draft: Partial<TaskDraft>): Promise<ChallengeTask> {
+  async updateTask(id: string, draft: Partial<TaskDraft>, etag?: string): Promise<ChallengeTask> {
     if (USE_MOCK) return mockApi.updateTask(id, draft)
-    return normalizeTask(await request(`/api/tasks/${id}`, { method: 'PATCH', body: JSON.stringify(draft) }))
+    return normalizeTask(await request(`/api/tasks/${id}`, { method: 'PATCH', headers: { 'If-Match': etag || '' }, body: JSON.stringify(draft) }))
   },
-  async clarifyTask(id: string): Promise<ClarificationQuestion[]> {
+  async clarifyTask(id: string): Promise<ClarificationQuestion[] & { etag?: string }> {
     if (USE_MOCK) return mockApi.clarifyTask(id)
-    return normalizeQuestions(await request(`/api/tasks/${id}/clarify`, { method: 'POST' }))
+    const data = await request<{ __etag?: string }>(`/api/tasks/${id}/clarify`, { method: 'POST' })
+    return Object.assign(normalizeQuestions(data), { etag: data.__etag })
   },
-  async saveAnswers(id: string, answers: Record<string, string>): Promise<void> {
+  async saveAnswers(id: string, answers: Record<string, string>, etag?: string): Promise<ChallengeTask | undefined> {
     if (USE_MOCK) { await mockApi.saveAnswers(); return }
-    await request(`/api/tasks/${id}/answers`, {
+    return normalizeTask(await request(`/api/tasks/${id}/answers`, {
       method: 'POST',
+      headers: { 'If-Match': etag || '' },
       body: JSON.stringify({ answers: Object.entries(answers).map(([questionId, answer]) => ({ questionId, answer })) }),
-    })
+    }))
   },
   async generateTask(id: string): Promise<ChallengeTask> {
     if (USE_MOCK) return mockApi.generateTask(id)
@@ -128,9 +155,9 @@ export const api = {
     if (USE_MOCK) return mockApi.createTeam(draft)
     return normalizeTeam(await request('/api/teams', { method: 'POST', body: JSON.stringify(draft) }))
   },
-  async updateTeam(id: string, draft: TeamDraft): Promise<Team> {
+  async updateTeam(id: string, draft: TeamDraft, etag?: string): Promise<Team> {
     if (USE_MOCK) return mockApi.updateTeam(id, draft)
-    return normalizeTeam(await request(`/api/teams/${id}`, { method: 'PATCH', body: JSON.stringify(draft) }))
+    return normalizeTeam(await request(`/api/teams/${id}`, { method: 'PATCH', headers: { 'If-Match': etag || '' }, body: JSON.stringify(draft) }))
   },
   async getTeamReviews(teamId: string): Promise<TeamReview[]> {
     if (USE_MOCK) return mockApi.getTeamReviews(teamId)

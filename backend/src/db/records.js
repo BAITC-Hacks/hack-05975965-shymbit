@@ -1,12 +1,15 @@
 // Все идентификаторы SQL берутся только из этого закрытого списка.
-const common = ['id', 'createdAt', 'updatedAt'];
+const common = ['id', 'createdAt', 'updatedAt', 'ownerId'];
 export const recordVersion = Symbol('taskVersion');
 export const fields = {
   tasks: [...common, 'title', 'shortDescription', 'organization', 'contactPerson', 'desiredResult', 'availableData', 'constraints', 'deadline', 'skills', 'technologies', 'status', 'clarificationQuestions', 'card', 'readinessScore', 'readinessExplanation', 'publishedAt'],
   teams: [...common, 'name', 'description', 'members', 'skills', 'technologies', 'projects', 'githubUrls'],
   applications: [...common, 'taskId', 'teamId', 'teamName', 'members', 'solutionDescription', 'technologies', 'contact', 'comment', 'status'],
-  reviews: ['id', 'taskId', 'teamId', 'authorName', 'normalizedAuthor', 'score', 'text', 'createdAt'],
-  assistant_plans: ['id', 'taskId', 'teamId', 'plan', 'createdAt']
+  reviews: ['id', 'taskId', 'teamId', 'authorId', 'authorName', 'normalizedAuthor', 'score', 'text', 'createdAt'],
+  assistant_plans: ['id', 'taskId', 'teamId', 'plan', 'createdAt'],
+  users: ['id', 'name', 'email', 'role', 'passwordHash', 'createdAt'],
+  sessions: ['tokenHash', 'userId', 'expiresAt'],
+  ownership_migrations: ['collection', 'id', 'ownerId', 'createdAt']
 };
 const jsonFields = new Set(['skills', 'technologies', 'clarificationQuestions', 'card', 'members', 'projects', 'githubUrls', 'plan']);
 export const column = (key) => key.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`);

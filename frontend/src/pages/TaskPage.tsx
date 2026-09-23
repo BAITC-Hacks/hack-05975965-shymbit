@@ -6,6 +6,7 @@ import { ApplicationForm } from '../components/ApplicationForm'
 import { AssistantPlanner } from '../components/AssistantPlanner'
 import { ReadinessScore } from '../components/ReadinessScore'
 import { TaskStatusBadge } from '../components/StatusBadge'
+import { TaskProgress } from '../components/TaskProgress'
 import { useToast } from '../components/Toast'
 import { api, getErrorMessage } from '../lib/api'
 import type { ChallengeTask } from '../types'
@@ -58,6 +59,7 @@ export function TaskPage() {
 
   return <div className="page"><div className="container container--content">
     <Link className="back-link" to={isPublic ? '/tasks' : '/my-tasks'}><ArrowLeft size={17} />{isPublic ? 'К каталогу' : 'К моим задачам'}</Link>
+    {!isPublic && task.status !== 'archived' && <TaskProgress step={3} />}
     <header className="task-header"><div><div className="task-header__meta"><span>{task.organization}</span><TaskStatusBadge status={task.status} /></div><h1>{task.title}</h1><p>{task.shortDescription}</p></div>{isPublic && <button className="button button--primary" onClick={() => setShowApplication(true)} disabled={showApplication}><Send size={18} />Откликнуться на задачу</button>}</header>
     <div className="owner-actions">
       {!isPublic && task.status !== 'archived' && <>

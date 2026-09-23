@@ -1,6 +1,8 @@
 export type TaskStatus = 'draft' | 'needs_clarification' | 'ready' | 'published' | 'archived'
 
 export interface ChallengeTask {
+  ownerId?: string
+  etag?: string
   id: string
   title: string
   shortDescription: string
@@ -22,6 +24,8 @@ export interface ChallengeTask {
   readinessScore?: number
   readinessExplanation?: string
   createdAt?: string
+  updatedAt?: string
+  publishedAt?: string
   clarificationQuestions?: ClarificationQuestion[]
 }
 
@@ -77,6 +81,8 @@ export interface TeamRating { average: number; reviewsCount: number }
 export interface TeamReview { id: string; teamId: string; taskId: string; authorName: string; score: number; text: string; createdAt?: string }
 export type TeamReviewDraft = Omit<TeamReview, 'id' | 'teamId' | 'createdAt'>
 export interface Team {
+  ownerId?: string
+  etag?: string
   id: string
   name: string
   description: string
@@ -87,7 +93,15 @@ export interface Team {
   githubUrls: string[]
   rating: TeamRating
 }
-export type TeamDraft = Omit<Team, 'id' | 'rating'>
+export type TeamDraft = Omit<Team, 'id' | 'rating' | 'ownerId' | 'etag'>
+
+export interface ImportResult {
+  importId: string
+  targetType: 'task' | 'team'
+  suggestions: Array<{ field: string; value: string | string[] | TeamMember[] | TeamProject[]; source: { fileName: string; page: number | null; excerpt: string }; warnings: string[] }>
+  missingFields: string[]
+  warnings: string[]
+}
 
 export interface ArchitectureComponent { name: string; responsibility: string; technologies: string[] }
 export interface Milestone { title: string; description: string; deliverable: string; estimatedHours: number; tasks: string[] }

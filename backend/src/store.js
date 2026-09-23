@@ -8,7 +8,10 @@ const emptyDatabase = () => ({
   applications: [],
   teams: [],
   reviews: [],
-  assistantPlans: []
+  assistantPlans: [],
+  users: [],
+  sessions: [],
+  ownershipMigrations: []
 });
 
 const clone = (value) => structuredClone(value);
@@ -27,9 +30,11 @@ export async function createJsonStore(filePath) {
   }
 
   for (const collection of Object.keys(emptyDatabase())) {
-    if (!Array.isArray(database[collection])) {
+    if (database[collection] === undefined) {
       database[collection] = [];
       needsMigration = true;
+    } else if (!Array.isArray(database[collection])) {
+      throw new Error("Повреждена коллекция базы данных. Восстановите её из резервной копии.");
     }
   }
 
@@ -68,6 +73,43 @@ export async function createJsonStore(filePath) {
   return {
     async close() { await writeQueue; },
     async checkHealth() { await writeQueue; await fs.access(filePath); },
+    createUser(data) {
+      return mutate(() => {
+        if (database.users.some((user) => user.email === data.email)) {
+          throw Object.assign(new Error("Аккаунт с такой почтой уже существует."), { status: 409 });
+        }
+        const user = { id: randomUUID(), ...data, createdAt: new Date().toISOString() };
+        database.users.push(user);
+        return user;
+      });
+    },
+    getUser(id) { return read(() => database.users.find((user) => user.id === id) || null); },
+    findUserByEmail(email) { return read(() => database.users.find((user) => user.email === email) || null); },
+    createSession(data) {
+      return mutate(() => {
+        database.sessions = database.sessions.filter((session) => Date.parse(session.expiresAt) > Date.now());
+        database.sessions.push(data);
+        return data;
+      });
+    },
+    getSession(hash) { return read(() => database.sessions.find((session) => session.tokenHash === hash) || null); },
+    deleteSession(hash) {
+      return mutate(() => { database.sessions = database.sessions.filter((session) => session.tokenHash !== hash); });
+    },
+    assignLegacyOwner(collection, id, ownerId) {
+      return mutate(() => {
+        const role = { tasks: "business", teams: "student", applications: "student" }[collection];
+        const user = database.users.find((item) => item.id === ownerId);
+        const item = role && database[collection].find((item) => item.id === id);
+        if (!user || user.role !== role || !item || item.ownerId) {
+          throw Object.assign(new Error("Проверьте объект без владельца и роль аккаунта."), { status: 409 });
+        }
+        item.ownerId = ownerId;
+        item.updatedAt = new Date().toISOString();
+        database.ownershipMigrations.push({ collection, id, ownerId, createdAt: item.updatedAt });
+        return item;
+      });
+    },
     createTask(data) {
       return mutate(() => {
         const now = new Date().toISOString();
@@ -113,6 +155,9 @@ export async function createJsonStore(filePath) {
 
     createApplication(data) {
       return mutate(() => {
+        if (database.tasks.find((task) => task.id === data.taskId)?.status !== "published") {
+          throw Object.assign(new Error("Задача больше не опубликована."), { status: 409 });
+        }
         const now = new Date().toISOString();
         const application = {
           id: randomUUID(),
@@ -127,7 +172,7 @@ export async function createJsonStore(filePath) {
     },
 
     listApplications(taskId) {
-      return read(() => database.applications.filter((application) => application.taskId === taskId));
+      return read(() => database.applications.filter((application) => !taskId || application.taskId === taskId));
     },
 
     getApplication(id) {
@@ -166,10 +211,13 @@ export async function createJsonStore(filePath) {
       return read(() => database.teams.find((team) => team.id === id) || null);
     },
 
-    updateTeam(id, patch) {
+    updateTeam(id, patch, expectedTeam) {
       return mutate(() => {
         const team = database.teams.find((item) => item.id === id);
         if (!team) return null;
+        if (expectedTeam && !isDeepStrictEqual(team, expectedTeam)) {
+          throw Object.assign(new Error("Профиль изменился. Обновите данные."), { status: 409 });
+        }
         Object.assign(team, patch, { updatedAt: new Date().toISOString() });
         return team;
       });
@@ -183,10 +231,15 @@ export async function createJsonStore(filePath) {
 
     createReview(data) {
       return mutate(() => {
+        if (!database.applications.some((item) => item.teamId === data.teamId
+          && item.taskId === data.taskId && item.status === "accepted")) {
+          throw Object.assign(new Error("Для отзыва нужен принятый отклик."), { status: 409 });
+        }
         const normalizedAuthor = data.authorName.trim().toLocaleLowerCase();
         const duplicate = database.reviews.some((review) => review.teamId === data.teamId
           && review.taskId === data.taskId
-          && review.authorName.trim().toLocaleLowerCase() === normalizedAuthor);
+          && ((data.authorId && review.authorId === data.authorId)
+            || review.authorName.trim().toLocaleLowerCase() === normalizedAuthor));
         if (duplicate) return null;
 
         const review = { id: randomUUID(), ...data, createdAt: new Date().toISOString() };

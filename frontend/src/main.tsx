@@ -6,6 +6,8 @@ import { ToastProvider } from './components/Toast'
 import './styles.css'
 import './status-fixes.css'
 import './hub.css'
+import './sana.css'
+import './catalog.css'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

@@ -28,6 +28,8 @@ export const normalizeTask = (raw: unknown): ChallengeTask => {
   const card = item.card && typeof item.card === 'object' ? item.card as UnknownRecord : {}
   return {
     id: text(item.id, item._id, item.task_id),
+    ownerId: text(item.ownerId) || undefined,
+    etag: text(item.__etag) || undefined,
     title: text(card.title, item.title, item.name, 'Без названия'),
     shortDescription: text(item.shortDescription, item.short_description, item.summary, card.description, item.description),
     organization: text(item.organization, item.company, 'Организация не указана'),
@@ -48,6 +50,8 @@ export const normalizeTask = (raw: unknown): ChallengeTask => {
     readinessScore: Number(item.readinessScore ?? item.readiness_score ?? item.readiness_rating ?? 0),
     readinessExplanation: text(item.readinessExplanation, item.readiness_explanation, item.rating_explanation),
     createdAt: text(item.createdAt, item.created_at),
+    updatedAt: text(item.updatedAt, item.updated_at),
+    publishedAt: text(item.publishedAt, item.published_at),
     clarificationQuestions: normalizeQuestions(item.clarificationQuestions),
   }
 }
@@ -107,6 +111,8 @@ export const normalizeTeam = (raw: unknown): Team => {
   const rating = (item.rating && typeof item.rating === 'object' ? item.rating : {}) as UnknownRecord
   return {
     id: text(item.id, item._id), name: text(item.name, item.teamName), description: text(item.description, item.summary),
+    ownerId: text(item.ownerId) || undefined,
+    etag: text(item.__etag) || undefined,
     members: objectList(item.members).map(normalizeMember), skills: list(item.skills, item.teamSkills), technologies: list(item.technologies, item.techStack),
     projects: objectList(item.projects).map((project) => ({ name: text(project.name), description: text(project.description), url: text(project.url) })),
     githubUrls: list(item.githubUrls, item.github_urls, item.githubLinks),

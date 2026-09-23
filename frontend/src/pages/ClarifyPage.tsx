@@ -1,7 +1,8 @@
-import { ArrowLeft, ArrowRight, Bot, RefreshCw, Save, Sparkles } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Bot, RefreshCw, Save } from 'lucide-react'
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { ErrorState, Loader } from '../components/AsyncState'
+import { TaskProgress } from '../components/TaskProgress'
 import { useToast } from '../components/Toast'
 import { api, getErrorMessage } from '../lib/api'
 import type { ClarificationQuestion } from '../types'
@@ -65,7 +66,8 @@ export function ClarifyPage() {
   return <div className="page page--form"><div className="container container--narrow">
     <Link className="back-link" to={`/tasks/${id}/edit`}><ArrowLeft size={17} />Вернуться к описанию</Link>
     <Link className="button button--secondary" to={`/tasks/${id}`}>Открыть карточку и опубликовать без уточнения</Link>
-    <div className="page-heading"><span className="pill"><Sparkles size={15} />Шаг 2 из 3</span><h1>Уточним важные детали</h1><p>AI проанализировал описание и подготовил вопросы. Ответы сделают карточку понятной для команд.</p></div>
+    <TaskProgress step={2} />
+    <div className="page-heading"><span className="eyebrow">Шаг 2 / 3 · Уточнение с AI</span><h1>Добавим главное. <em>Вместе с AI.</em></h1><p>AI поможет уточнить цель, данные и ожидаемый результат. Ваши ответы станут основой понятной карточки для команд.</p></div>
     {loading ? <Loader label="AI анализирует задачу…" /> : error ? <ErrorState message={error} retry={requestQuestions} /> : (
       <form className="form-card clarification" onSubmit={submit}>
         <div className="ai-note"><span><Bot size={24} /></span><div><strong>Вопросы от AI-помощника</strong><p>Отвечайте конкретно, но можно коротко. Ответы сохраняются перед генерацией.</p></div></div>
