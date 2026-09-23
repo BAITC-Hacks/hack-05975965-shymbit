@@ -84,7 +84,7 @@ export function createApp({ store, aiService }) {
   });
 
   app.get("/health", (request, response) => {
-    response.json({ status: "ok" });
+    response.json({ status: "ok", service: "ai-sana-challenge-hub" });
   });
 
   app.post("/api/teams", asyncHandler(async (request, response) => {

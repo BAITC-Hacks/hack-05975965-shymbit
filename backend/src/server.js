@@ -6,6 +6,13 @@ import { createJsonStore } from "./store.js";
 const store = await createJsonStore(config.dbFile);
 const app = createApp({ store, aiService: createAIService(config) });
 
-app.listen(config.port, () => {
+const server = app.listen(config.port, () => {
   console.log(`AI Sana Challenge Hub backend запущен на http://localhost:${config.port}`);
+});
+
+server.on('error', (error) => {
+  console.error(error.code === 'EADDRINUSE'
+    ? `Порт ${config.port} занят. Запустите npm run dev из корня проекта: свободный порт будет выбран автоматически.`
+    : 'Не удалось запустить backend. Проверьте настройки сервера.');
+  process.exitCode = 1;
 });

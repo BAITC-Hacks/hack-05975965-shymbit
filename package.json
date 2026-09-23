@@ -2,6 +2,8 @@
   "name": "ai-sana-challenge-hub",
   "private": true,
   "scripts": {
+    "setup": "npm --prefix backend ci && npm --prefix frontend ci",
+    "test:startup": "node --test scripts/dev-runtime.test.mjs",
     "dev": "node scripts/dev.mjs",
     "dev:backend": "npm --prefix backend run dev",
     "dev:frontend": "npm --prefix frontend run dev"
