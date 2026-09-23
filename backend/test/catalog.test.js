@@ -7,6 +7,7 @@ import path from "node:path";
 import test from "node:test";
 import { createApp } from "../src/app.js";
 import { createJsonStore } from "../src/store.js";
+import { register, versionHeaders } from "../testSupport.js";
 
 const draft = {
   title: "Учебный помощник",
@@ -35,6 +36,7 @@ async function fixture(t, aiService = fakeAI) {
   const filePath = path.join(directory, "db.json");
   let server;
   let baseUrl;
+  let token;
   const context = {
     filePath,
     async start() {
@@ -42,15 +44,17 @@ async function fixture(t, aiService = fakeAI) {
       server = createApp({ store: context.store, aiService }).listen(0, "127.0.0.1");
       await once(server, "listening");
       baseUrl = `http://127.0.0.1:${server.address().port}`;
+      if (!token) token = (await register(baseUrl, "business")).token;
     },
     async stop() {
       if (!server?.listening) return;
       await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
     },
     async request(method, route, body, expectedStatus = 200) {
+      const version = method === "PATCH" ? await versionHeaders(baseUrl, route, token) : {};
       const response = await fetch(`${baseUrl}${route}`, {
         method,
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, ...version },
         body: body === undefined ? undefined : JSON.stringify(body)
       });
       const data = await response.json();
@@ -183,7 +187,8 @@ test("новые публикации идут первыми, одинаков�
 
 test("параллельные генерации и публикации разных задач сохраняются на диск", async (t) => {
   const app = await fixture(t);
-  const ready = await Promise.all(Array.from({ length: 10 }, () => app.ready()));
+  const ready = [];
+  for (let index = 0; index < 5; index++) ready.push(...await Promise.all([app.ready(), app.ready()]));
   const published = await Promise.all(ready.map((task) => app.publish(task.id)));
   const disk = await createJsonStore(app.filePath);
   assert.equal((await disk.listTasks()).length, 10);

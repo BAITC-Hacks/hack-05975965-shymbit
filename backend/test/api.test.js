@@ -6,6 +6,9 @@ import test from "node:test";
 import { createApp } from "../src/app.js";
 import { createAIService } from "../src/services/aiService.js";
 import { createJsonStore } from "../src/store.js";
+import { register, versionHeaders } from "../testSupport.js";
+
+const actors = new Map();
 
 const fakeAI = {
   async generateQuestions() {
@@ -79,10 +82,12 @@ async function createTestServer(aiService = fakeAI) {
   const server = createApp({ store, aiService }).listen(0);
   await new Promise((resolve) => server.once("listening", resolve));
   const baseUrl = `http://127.0.0.1:${server.address().port}`;
+  actors.set(baseUrl, { business: await register(baseUrl, "business"), student: await register(baseUrl, "student") });
   return {
     baseUrl,
     store,
     close: async () => {
+      actors.delete(baseUrl);
       await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
       await rm(directory, { recursive: true, force: true });
     }
@@ -120,9 +125,14 @@ async function createTeam(baseUrl, overrides = {}) {
 }
 
 async function request(baseUrl, method, route, body) {
+  const studentRoute = (route.startsWith("/api/teams") && !route.includes("/reviews"))
+    || route.includes("/assistant") || (method === "POST" && route.endsWith("/applications"));
+  const token = actors.get(baseUrl)[studentRoute ? "student" : "business"].token;
+  const version = (method === "PATCH" && !route.startsWith("/api/applications")) || route.endsWith("/answers")
+    ? await versionHeaders(baseUrl, route, token) : {};
   const response = await fetch(`${baseUrl}${route}`, {
     method,
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, ...version },
     body: body === undefined ? undefined : JSON.stringify(body)
   });
   return { response, data: await response.json() };
@@ -279,9 +289,16 @@ test("профили команд, фильтрация, принятые отк
   ]);
   assert.deepEqual(concurrentReviews.map(({ response }) => response.status).sort(), [201, 409]);
 
+  const secondTask = await createTask(server.baseUrl);
+  await server.store.updateTask(secondTask.id, { status: "published" });
+  const secondApplication = await request(server.baseUrl, "POST", `/api/tasks/${secondTask.id}/applications`, {
+    teamId: created.data.id, teamName: "Команда", members: ["Алия"],
+    solutionDescription: "Ещё один прототип решения.", contact: "team@example.test"
+  });
+  await request(server.baseUrl, "PATCH", `/api/applications/${secondApplication.data.id}`, { status: "accepted" });
   const secondReview = await request(server.baseUrl, "POST", `/api/teams/${created.data.id}/reviews`, {
     ...reviewBody,
-    authorName: "Другой заказчик",
+    taskId: secondTask.id,
     score: 4
   });
   assert.equal(secondReview.response.status, 201);

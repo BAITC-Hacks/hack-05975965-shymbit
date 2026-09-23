@@ -4,7 +4,8 @@ import { createAIService } from "./services/aiService.js";
 import { createJsonStore } from "./store.js";
 
 const store = await createJsonStore(config.dbFile);
-const app = createApp({ store, aiService: createAIService(config) });
+const app = createApp({ store, aiService: createAIService(config), importLimits: config.importLimits,
+  aiRequestLimit: config.aiRequestLimit, aiConcurrency: config.aiConcurrency });
 
 const server = app.listen(config.port, () => {
   console.log(`AI Sana Challenge Hub backend запущен на http://localhost:${config.port}`);
