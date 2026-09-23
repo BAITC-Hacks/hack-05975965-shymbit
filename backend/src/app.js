@@ -71,12 +71,20 @@ function validateAssistantPlan(plan, team) {
   return result.data;
 }
 
-export function createApp({ store, aiService }) {
+export function createApp({ store, aiService, allowedOrigins = [], production = false }) {
   const app = express();
   app.disable("x-powered-by");
   app.use(express.json({ limit: "1mb" }));
   app.use((request, response, next) => {
-    response.setHeader("Access-Control-Allow-Origin", "*");
+    const origin = request.headers.origin;
+    if (allowedOrigins.includes(origin)) {
+      response.setHeader('Access-Control-Allow-Origin', origin);
+      response.vary('Origin');
+    } else if (!production && allowedOrigins.length === 0) {
+      response.setHeader('Access-Control-Allow-Origin', '*');
+    } else if (origin) {
+      return response.status(403).json({ error: 'Источник запроса не разрешён.' });
+    }
     response.setHeader("Access-Control-Allow-Headers", "Content-Type");
     response.setHeader("Access-Control-Allow-Methods", "GET,POST,PATCH,OPTIONS");
     if (request.method === "OPTIONS") return response.sendStatus(204);
@@ -86,6 +94,15 @@ export function createApp({ store, aiService }) {
   app.get("/health", (request, response) => {
     response.json({ status: "ok", service: "ai-sana-challenge-hub" });
   });
+
+  app.get('/ready', asyncHandler(async (request, response) => {
+    try {
+      await store.checkHealth();
+      response.json({ status: 'ok', service: 'ai-sana-challenge-hub' });
+    } catch {
+      response.status(503).json({ error: 'Хранилище временно недоступно.' });
+    }
+  }));
 
   app.post("/api/teams", asyncHandler(async (request, response) => {
     const data = parseBody(teamCreateSchema, request.body);

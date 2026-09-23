@@ -25,7 +25,7 @@ if (process.send) process.on('message', (message) => {
 });
 
 try {
-  for (const dependency of ['backend/node_modules/express/package.json', 'frontend/node_modules/vite/bin/vite.js']) {
+  for (const dependency of ['backend/node_modules/express/package.json', 'backend/node_modules/pg/package.json', 'frontend/node_modules/vite/bin/vite.js']) {
     await access(fileURLToPath(new URL(dependency, root))).catch(() => {
       throw new Error('Не установлены зависимости. Выполните npm run setup из корня проекта.');
     });
@@ -49,7 +49,9 @@ try {
   if (!stopping) {
     // В едином режиме frontend всегда подключается к запущенному здесь серверу.
     const frontendEnv = { ...process.env, VITE_API_URL: apiUrl, VITE_USE_MOCK_API: 'false' };
-    for (const key of Object.keys(frontendEnv)) if (key.startsWith('AI_')) delete frontendEnv[key];
+    for (const key of Object.keys(frontendEnv)) {
+      if (key.startsWith('AI_') || key.startsWith('DB_') || key.startsWith('PG') || key.endsWith('DATABASE_URL')) delete frontendEnv[key];
+    }
     frontend = spawn(process.execPath, ['node_modules/vite/bin/vite.js', '--host', '127.0.0.1'], {
       cwd: frontendDirectory, env: frontendEnv, stdio: 'inherit',
     });

@@ -66,6 +66,8 @@ export async function createJsonStore(filePath) {
   };
 
   return {
+    async close() { await writeQueue; },
+    async checkHealth() { await writeQueue; await fs.access(filePath); },
     createTask(data) {
       return mutate(() => {
         const now = new Date().toISOString();

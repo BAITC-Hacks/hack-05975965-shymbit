@@ -7,11 +7,18 @@
   "scripts": {
     "dev": "node --watch src/server.js",
     "start": "node src/server.js",
-    "test": "node --test"
+    "test": "node --test test/*.test.js",
+    "db:migrate": "node scripts/migrate.mjs",
+    "db:import-json": "node scripts/import-json.mjs",
+    "db:backup": "node scripts/backup.mjs",
+    "db:restore": "node scripts/restore.mjs",
+    "test:postgres": "node --test integration/postgres.test.js"
   },
+  "engines": { "node": ">=22.12.0" },
   "dependencies": {
     "dotenv": "^16.4.7",
     "express": "^5.1.0",
+    "pg": "^8.23.0",
     "zod": "^3.24.2"
   }
 }

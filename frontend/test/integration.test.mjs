@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { createServer } from 'vite';
 import { createApp } from '../../backend/src/app.js';
 import { createJsonStore } from '../../backend/src/store.js';
+import { postgresFixture } from '../../backend/test-support/postgres.js';
 
 const teamDraft = {
   name: 'Команда проверки', description: 'Создаём образовательные веб-приложения.',
@@ -96,9 +97,10 @@ async function scenario(api) {
 
 test('Frontend-клиент и backend: команда, задача, отклик, отзыв и AI-планы; совместимость mock', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'sana-integration-'));
-  let server, vite;
+  let server, vite, postgres;
   try {
-    const store = await createJsonStore(join(directory, 'db.json'));
+    if (process.env.TEST_DATABASE_URL) postgres = await postgresFixture();
+    const store = postgres ? await postgres.store() : await createJsonStore(join(directory, 'db.json'));
     server = createApp({ store, aiService: fakeAI }).listen(0, '127.0.0.1');
     await new Promise((resolve) => server.once('listening', resolve));
     vite = await createServer({
@@ -118,6 +120,7 @@ test('Frontend-клиент и backend: команда, задача, откли
   } finally {
     if (vite) await vite.close();
     if (server) await new Promise((resolve) => server.close(resolve));
+    if (postgres) await postgres.close();
     await rm(directory, { recursive: true, force: true });
   }
 });
