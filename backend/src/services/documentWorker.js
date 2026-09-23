@@ -119,7 +119,8 @@ try {
           const chunk = await stream.read();
           if (chunk.done) break;
           for (const item of chunk.value.items) {
-            const part = item.str ? item.str + (item.hasEOL ? "\n" : " ") : "";
+            // PDF.js может передавать конец строки отдельным пустым элементом.
+            const part = typeof item.str === "string" ? item.str + (item.hasEOL ? "\n" : " ") : "";
             length += part.length;
             if (length > limits.maxChars) throw failure(413, "В PDF слишком много текста.");
             text += part;

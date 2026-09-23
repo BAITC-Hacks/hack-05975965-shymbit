@@ -4,10 +4,10 @@ import { z } from "zod";
 import { parseBody, taskCreateSchema, teamCreateSchema } from "./validation.js";
 import { documentDefaults, documentType, parseDocument } from "./services/documentParser.js";
 import { httpError, requireRole, requireOwner } from "./security.js";
+import { includesEvidence, recoverSource, labeledSuggestions } from './services/importEvidence.js';
 
 const schemas = { task: taskCreateSchema, team: teamCreateSchema };
 export const importFields = Object.fromEntries(Object.entries(schemas).map(([type, schema]) => [type, Object.keys(schema.shape)]));
-const normalize = (text) => text.normalize("NFKC").replace(/\s+/g, " ").trim().toLocaleLowerCase();
 const leaves = (value) => typeof value === "string" ? [value]
   : Array.isArray(value) ? value.flatMap(leaves) : Object.values(value).flatMap(leaves);
 
@@ -21,21 +21,39 @@ export function validateSuggestions(result, targetType, document, fileName) {
   const parsed = z.object({ suggestions: z.array(suggestion).max(allowed.length),
     warnings: z.array(z.string().max(1000)).max(20) }).strict().safeParse(result);
   if (!parsed.success) throw httpError(502, "AI вернул некорректный набор предложений.");
+  if (new Set(parsed.data.suggestions.map((item) => item.field)).size !== parsed.data.suggestions.length) {
+    throw httpError(502, 'AI вернул повторяющиеся поля. Повторите запрос.');
+  }
   const seen = new Set();
-  const suggestions = parsed.data.suggestions.map((item) => {
+  const warnings = [...parsed.data.warnings];
+  const suggestions = [];
+  const candidates = [...labeledSuggestions(document, targetType), ...parsed.data.suggestions];
+  for (const item of candidates) {
+    if (seen.has(item.field)) continue;
     const value = schemas[targetType].shape[item.field].safeParse(item.value);
+    if (!value.success || value.data === undefined || !leaves(value.data).length) {
+      warnings.push(`Поле «${item.field}» пропущено: неподходящий тип или формат значения.`);
+      continue;
+    }
+    const texts = leaves(value.data);
     const page = document.pages.find((page) => page.page === item.source.page);
-    const excerpt = normalize(item.source.excerpt);
-    if (seen.has(item.field) || !value.success || value.data === undefined || !page
-      || !normalize(page.text).includes(excerpt) || !leaves(value.data).length
-      || leaves(value.data).some((text) => !normalize(text) || !excerpt.includes(normalize(text)))) {
-      throw httpError(502, "AI предложил данные без подтверждения в документе. Заполните поля вручную или повторите запрос.");
+    let source = item.source;
+    const fieldWarnings = [...item.warnings];
+    if (!page || !includesEvidence(page.text, source.excerpt)
+      || texts.some((text) => !includesEvidence(source.excerpt, text))) {
+      source = recoverSource(document, texts, item.source.page);
+      if (!source) {
+        warnings.push(`Поле «${item.field}» пропущено: значение не подтверждено текстом документа. Заполните его вручную.`);
+        continue;
+      }
+      fieldWarnings.push('Цитата восстановлена по дословному значению в документе. Проверьте контекст.');
     }
     seen.add(item.field);
-    return { ...item, value: value.data, source: { ...item.source, fileName } };
-  });
+    suggestions.push({ ...item, value: value.data, warnings: fieldWarnings, source: { ...source, fileName } });
+  }
+  if (!suggestions.length) warnings.push('Подтверждённые поля не найдены. Используйте документ с явными подписями полей или заполните форму вручную.');
   return { importId: randomUUID(), targetType, suggestions,
-    missingFields: allowed.filter((field) => !seen.has(field)), warnings: parsed.data.warnings };
+    missingFields: allowed.filter((field) => !seen.has(field)), warnings };
 }
 
 export function installImports(app, { store, aiService, asyncHandler, aiLimits, runAI, importLimits = {} }) {

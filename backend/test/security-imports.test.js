@@ -277,24 +277,34 @@ test("парсеры ограничивают страницы, текст, ра
   await assert.rejects(parseDocument(docx(await makeDocx("Описание")), { maxEntries: 1 }), { status: 413 });
 });
 
-test("валидация AI отклоняет придуманные значения, источники и технические поля целиком", async (t) => {
+test("импорт отклоняет неверную структуру, но пропускает неподтверждённые поля отдельно", async (t) => {
   const app = await setup(t, { aiRequestLimit: 100 });
   const text = "Описание учебного проекта";
   const invalid = [
-    {}, suggestion(text, "ownerId"), suggestion("Вымышленное значение"), suggestion(text, "shortDescription", 99),
+    {}, suggestion(text, "ownerId"),
     { ...suggestion(text), unexpected: "secret" },
-    { suggestions: [suggestion(text).suggestions[0], suggestion(text).suggestions[0]], warnings: [] },
-    { suggestions: [{ ...suggestion(text).suggestions[0], value: 55 }], warnings: [] }
+    { suggestions: [suggestion(text).suggestions[0], suggestion(text).suggestions[0]], warnings: [] }
   ];
   for (const result of invalid) {
     app.ai.extractFields = async () => result;
     assert.equal((await app.upload(Buffer.from(text))).status, 502);
   }
+  for (const result of [suggestion('Вымышленное значение'), { suggestions: [{ ...suggestion(text).suggestions[0], value: 55 }], warnings: [] }]) {
+    app.ai.extractFields = async () => result;
+    const response = await app.upload(Buffer.from(text));
+    assert.equal(response.status, 200);
+    assert.equal(response.data.suggestions.length, 0);
+    assert.ok(response.data.warnings.length);
+  }
+  app.ai.extractFields = async () => suggestion(text, 'shortDescription', 99);
+  const recovered = await app.upload(Buffer.from(text));
+  assert.equal(recovered.status, 200);
+  assert.equal(recovered.data.suggestions[0].source.page, null);
   app.ai.extractFields = async () => { throw httpError(504, "AI не ответил вовремя."); };
   assert.equal((await app.upload(Buffer.from(text))).status, 504);
   assert.equal((await app.store.listTasks()).length, 0);
   assert.deepEqual(await readdir(app.directory), ["db.json"]);
-  assert.throws(() => validateSuggestions(suggestion("https://github.com/fake", "githubUrls"), "team", { pages: [{ page: null, text }] }, "test.txt"), { status: 502 });
+  assert.equal(validateSuggestions(suggestion("https://github.com/fake", "githubUrls"), "team", { pages: [{ page: null, text }] }, "test.txt").suggestions.length, 0);
 });
 
 test("инструкции документа не становятся системными, ключ не попадает в payload", async (t) => {
