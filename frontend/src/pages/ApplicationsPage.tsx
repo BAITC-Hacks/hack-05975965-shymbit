@@ -66,6 +66,7 @@ export function ApplicationsPage() {
                   {application.comment && <div><dt>Комментарий</dt><dd>{application.comment}</dd></div>}
                 </dl>
                 <div className="application-card__actions">
+                  {application.teamId && <Link className="button button--secondary" to={`/teams/${application.teamId}?taskId=${encodeURIComponent(id)}`}>Профиль и отзывы команды</Link>}
                   <button className="button button--secondary" onClick={() => update(application.id, 'reviewed')} disabled={updating === application.id}><Clock3 size={17} />На рассмотрение</button>
                   <button className="button button--success" onClick={() => update(application.id, 'accepted')} disabled={updating === application.id}><Check size={17} />Принять</button>
                   <button className="button button--danger-ghost" onClick={() => update(application.id, 'rejected')} disabled={updating === application.id}><X size={17} />Отклонить</button>

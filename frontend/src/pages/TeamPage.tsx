@@ -1,6 +1,6 @@
 import { ArrowLeft, Edit3, Code2, Star, Users } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { EmptyState, ErrorState, Loader } from '../components/AsyncState'
 import { Chips, Rating, SafeLink } from '../components/TeamUI'
 import { useToast } from '../components/Toast'
@@ -9,6 +9,7 @@ import type { Team, TeamReview, TeamReviewDraft } from '../types'
 
 export function TeamPage() {
   const { id = '' } = useParams()
+  const [searchParams] = useSearchParams()
   const [team, setTeam] = useState<Team | null>(null)
   const [reviews, setReviews] = useState<TeamReview[]>([])
   const [loading, setLoading] = useState(true)
@@ -17,7 +18,7 @@ export function TeamPage() {
   const [saving, setSaving] = useState(false)
   const busy = useRef(false)
   const { showToast } = useToast()
-  const [draft, setDraft] = useState<TeamReviewDraft>({ taskId: '', authorName: '', score: 5, text: '' })
+  const [draft, setDraft] = useState<TeamReviewDraft>({ taskId: searchParams.get('taskId') || '', authorName: '', score: 5, text: '' })
   const load = useCallback(async () => {
     setLoading(true); setError('')
     try { const [value, items] = await Promise.all([api.getTeam(id), api.getTeamReviews(id)]); setTeam(value); setReviews(items) }
