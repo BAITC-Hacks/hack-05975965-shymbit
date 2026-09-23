@@ -32,6 +32,8 @@ services:
           property: connectionString
       - key: DB_SSL_MODE
         value: require
+      - key: TRUST_PROXY_HOPS
+        value: "1"
       - key: DB_POOL_MAX
         value: "5"
       - key: AI_API_KEY

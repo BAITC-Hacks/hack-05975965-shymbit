@@ -26,7 +26,7 @@ test('TLS задаётся явно, URL и ошибки не раскрываю
 });
 
 test('импорт проверяет структуру без доступа к БД', () => {
-  assert.deepEqual(validateImport({}), { tasks: [], teams: [], applications: [], reviews: [], assistantPlans: [] });
+  assert.deepEqual(validateImport({}), { tasks: [], teams: [], applications: [], reviews: [], assistantPlans: [], users: [], sessions: [], ownershipMigrations: [] });
   assert.throws(() => validateImport({ tasks: [{ contactPerson: 'SECRET' }] }), (error) => !error.message.includes('SECRET'));
   assert.throws(() => validateImport({ unknown: [] }));
 });

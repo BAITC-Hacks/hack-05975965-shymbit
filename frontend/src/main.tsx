@@ -8,6 +8,10 @@ import './status-fixes.css'
 import './hub.css'
 import './sana.css'
 import './catalog.css'
+import './integration.css'
+import './themes.css'
+import './motion.css'
+import './theme-motion.css'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

@@ -9,6 +9,7 @@ import { TaskStatusBadge } from '../components/StatusBadge'
 import { TaskProgress } from '../components/TaskProgress'
 import { useToast } from '../components/Toast'
 import { api, getErrorMessage } from '../lib/api'
+import { useSession } from '../lib/session'
 import type { ChallengeTask } from '../types'
 
 const blocks: Array<{ key: keyof ChallengeTask; title: string }> = [
@@ -20,6 +21,8 @@ const blocks: Array<{ key: keyof ChallengeTask; title: string }> = [
 ]
 
 export function TaskPage() {
+  const session = useSession()
+  const demo = import.meta.env.VITE_USE_MOCK_API === 'true'
   const { id = '' } = useParams()
   const { showToast } = useToast()
   const [task, setTask] = useState<ChallengeTask | null>(null)
@@ -55,13 +58,15 @@ export function TaskPage() {
 
   if (loading) return <div className="container page"><Loader label="Загружаем карточку…" /></div>
   if (error || !task) return <div className="container page"><ErrorState message={error || 'Задача не найдена.'} retry={load} /></div>
+  const isOwner = demo || (session?.user.role === 'business' && task.ownerId === session.user.id)
+  const isStudent = demo || session?.user.role === 'student'
   const isPublic = task.status === 'published'
 
   return <div className="page"><div className="container container--content">
     <Link className="back-link" to={isPublic ? '/tasks' : '/my-tasks'}><ArrowLeft size={17} />{isPublic ? 'К каталогу' : 'К моим задачам'}</Link>
     {!isPublic && task.status !== 'archived' && <TaskProgress step={3} />}
-    <header className="task-header"><div><div className="task-header__meta"><span>{task.organization}</span><TaskStatusBadge status={task.status} /></div><h1>{task.title}</h1><p>{task.shortDescription}</p></div>{isPublic && <button className="button button--primary" onClick={() => setShowApplication(true)} disabled={showApplication}><Send size={18} />Откликнуться на задачу</button>}</header>
-    <div className="owner-actions">
+    <header className="task-header"><div><div className="task-header__meta"><span>{task.organization}</span><TaskStatusBadge status={task.status} /></div><h1>{task.title}</h1><p>{task.shortDescription}</p></div>{isPublic && isStudent && <button className="button button--primary" onClick={() => setShowApplication(true)} disabled={showApplication}><Send size={18} />Откликнуться на задачу</button>}</header>
+    {isOwner && <div className="owner-actions">
       {!isPublic && task.status !== 'archived' && <>
         <Link className="button button--secondary" to={`/tasks/${id}/edit`}><Edit3 size={17} />Редактировать</Link>
         <button className="button button--secondary" onClick={() => run('generate')} disabled={Boolean(action)}><RefreshCw size={17} />{action === 'generate' ? 'Формируем…' : 'Сформировать заново'}</button>
@@ -71,14 +76,15 @@ export function TaskPage() {
       {!isPublic && <button className="button button--primary" onClick={() => run('publish')} disabled={Boolean(action)}><Check size={18} />{action === 'publish' ? 'Публикуем…' : 'Опубликовать в каталоге'}</button>}
       <Link className="button button--ghost" to={`/tasks/${id}/applications`}><Users size={17} />Отклики</Link>
       {task.status !== 'archived' && <button className="button button--danger-ghost" onClick={() => run('archive')} disabled={Boolean(action)}><Archive size={17} />В архив</button>}
-    </div>
+    </div>}
+    {isPublic && !session && !demo && <Link className="button button--primary" to={`/login?next=/tasks/${id}`}>Войти студентом, чтобы откликнуться и получить AI-план</Link>}
     {task.status === 'archived' && <p className="muted">Задача скрыта из каталога. Восстановите её для редактирования или сразу опубликуйте снова. Карточка и отклики сохранятся.</p>}
     {!isPublic && <p className="muted">AI-уточнение и рейтинг готовности помогают улучшить описание, но не ограничивают публикацию.</p>}
     {isPublic && <Link className="text-link" to="/tasks">Посмотреть задачу в каталоге →</Link>}
     <ReadinessScore score={task.readinessScore} explanation={task.readinessExplanation} />
-    {isPublic && <a className="button button--secondary assistant-jump" href="#assistant-plan">Составить план решения с AI ↓</a>}
+    {isPublic && isStudent && <a className="button button--secondary assistant-jump" href="#assistant-plan">Составить план решения с AI ↓</a>}
     <div className="detail-layout"><div className="detail-main">{blocks.filter(({ key }) => Boolean(task[key])).map(({ key, title }) => <section className="detail-block" key={key}><h2>{title}</h2><p>{String(task[key])}</p></section>)}</div><aside className="detail-aside"><section><h3>Необходимые навыки</h3><div className="chip-list">{task.skills.length ? task.skills.map((item) => <span className="chip" key={item}>{item}</span>) : <p className="muted">Не указаны</p>}</div></section><section><h3>Технологии</h3><div className="chip-list">{task.technologies.length ? task.technologies.map((item) => <span className="chip chip--accent" key={item}>{item}</span>) : <p className="muted">Не указаны</p>}</div></section></aside></div>
     {showApplication && <ApplicationForm taskId={id} onClose={() => setShowApplication(false)} />}
-    {isPublic && <AssistantPlanner key={id} taskId={id} />}
+    {isPublic && isStudent && <AssistantPlanner key={id} taskId={id} />}
   </div></div>
 }

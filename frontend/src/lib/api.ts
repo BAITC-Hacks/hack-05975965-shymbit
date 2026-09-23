@@ -64,8 +64,8 @@ export const api = {
   },
   async logout() { try { await request('/api/auth/logout', { method: 'POST' }) } finally { setSession(null) } },
   async me() { return (await request<{ user: User }>('/api/auth/me')).user },
-  async getMyTeams(): Promise<Team[]> { return normalizeTeamList(await request('/api/me/teams')) },
-  async getMyApplications(): Promise<Application[]> { return normalizeApplicationList(await request('/api/me/applications')) },
+  async getMyTeams(): Promise<Team[]> { if (USE_MOCK) return mockApi.getTeams(); return normalizeTeamList(await request('/api/me/teams')) },
+  async getMyApplications(): Promise<Application[]> { if (USE_MOCK) return []; return normalizeApplicationList(await request('/api/me/applications')) },
   async extractDocument(file: File, targetType: 'task' | 'team', targetId?: string): Promise<ImportResult> {
     const body = new FormData(); body.append('file', file); body.append('targetType', targetType)
     if (targetId) body.append('targetId', targetId)

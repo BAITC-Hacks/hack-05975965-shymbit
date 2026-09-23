@@ -1,0 +1,46 @@
+:root { --motion-ease: cubic-bezier(.2,.7,.2,1); }
+
+.button, .hero-secondary, .text-link, .theme-toggle, .menu-button,
+.challenge-card, .team-card, .member-card, .history-button, .chip,
+.nav__link, .footer__links a {
+  transition: transform 220ms var(--motion-ease), background-color 220ms ease,
+    color 220ms ease, border-color 220ms ease, box-shadow 220ms ease, opacity 180ms ease;
+}
+.button svg, .hero-secondary svg, .text-link svg, .challenge-card__link svg,
+.footer__links svg { transition: transform 220ms var(--motion-ease); }
+.field input, .field textarea, .field select, .question__body textarea, .tag-input {
+  transition: border-color 200ms ease, box-shadow 200ms ease, background-color 220ms ease, color 220ms ease;
+}
+.button:active:not(:disabled), .theme-toggle:active:not(:disabled),
+.menu-button:active, .history-button:active:not(:disabled) { transform: scale(.975); }
+.theme-toggle:disabled { cursor: progress; }
+
+@media(hover:hover) and (pointer:fine) {
+  .button:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 7px 18px var(--shadow-soft); }
+  .button--ghost:hover { box-shadow: none; }
+  .challenge-card:hover, .directory-page--teams .team-card:hover { transform: translateY(-4px); box-shadow: 0 12px 28px var(--shadow-soft); }
+  .member-card:hover { transform: translateY(-2px); }
+  .hero-secondary:hover svg, .text-link:hover svg, .challenge-card__link:hover svg,
+  .footer__links a:hover svg { transform: translate(2px,-2px); }
+  .button:hover:not(:disabled) svg { transform: translateX(2px); }
+  .theme-toggle:hover:not(:disabled) { transform: translateY(-1px); }
+}
+
+.modal-backdrop { animation: sana-fade-in 200ms ease both; }
+.modal { animation: sana-dialog-in 300ms var(--motion-ease) both; }
+.toast { animation: sana-toast-in 300ms var(--motion-ease) both; }
+.inline-error, .success-state { animation: sana-fade-in 240ms ease both; }
+.plan-result { animation: sana-dialog-in 380ms var(--motion-ease) both; }
+.history-button.is-selected { transition-duration: 180ms; }
+@media(max-width:850px) { .nav--open { animation: sana-menu-in 220ms var(--motion-ease) both; } }
+
+@keyframes sana-fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes sana-dialog-in { from { opacity: 0; transform: translateY(12px) scale(.99); } to { opacity: 1; transform: none; } }
+@keyframes sana-toast-in { from { opacity: 0; transform: translateX(18px); } to { opacity: 1; transform: none; } }
+@keyframes sana-menu-in { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+
+@media(prefers-reduced-motion:reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+  .button:hover:not(:disabled), .challenge-card:hover, .team-card:hover,
+  .directory-page--teams .team-card:hover, .member-card:hover, .theme-toggle:hover:not(:disabled) { transform: none; }
+}

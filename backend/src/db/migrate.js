@@ -6,7 +6,11 @@ const directory = new URL('../../migrations/', import.meta.url);
 async function migrations(source = directory) {
   return Promise.all((await readdir(source)).filter((name) => /^\d+.*\.sql$/.test(name)).sort().map(async (name) => {
     const sql = await readFile(new URL(name, source), 'utf8');
-    return { name, sql, checksum: createHash('sha256').update(sql).digest('hex') };
+    // Перенос Windows -> Linux не должен менять контрольную сумму SQL.
+    const normalized = sql.replace(/\r\n/g, '\n');
+    const checksum = createHash('sha256').update(normalized).digest('hex');
+    const legacyChecksum = createHash('sha256').update(normalized.replace(/\n/g, '\r\n')).digest('hex');
+    return { name, sql, checksum, checksums: [checksum, legacyChecksum] };
   }));
 }
 
@@ -21,7 +25,7 @@ export async function migrate(pool, source = directory) {
     for (const file of files) {
       const existing = await client.query('SELECT checksum FROM schema_migrations WHERE name=$1', [file.name]);
       if (existing.rowCount) {
-        if (existing.rows[0].checksum !== file.checksum) throw storageError('Изменена ранее применённая миграция. Создайте новую миграцию.', 500);
+        if (!file.checksums.includes(existing.rows[0].checksum)) throw storageError('Изменена ранее применённая миграция. Создайте новую миграцию.', 500);
         continue;
       }
       await client.query('BEGIN');
@@ -45,7 +49,7 @@ export async function checkSchema(pool) {
   try {
     const applied = await pool.query('SELECT name, checksum FROM schema_migrations');
     for (const file of await migrations()) {
-      if (!applied.rows.some((row) => row.name === file.name && row.checksum === file.checksum)) throw new Error();
+      if (!applied.rows.some((row) => row.name === file.name && file.checksums.includes(row.checksum))) throw new Error();
     }
   } catch { throw storageError('База данных недоступна или схема не готова. Проверьте подключение и выполните npm run db:migrate.', 503); }
 }

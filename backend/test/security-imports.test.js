@@ -196,7 +196,8 @@ test("If-Match защищает формы от устаревших сохра�
   const edited = await app.request("PATCH", route, { deadline: "Другой срок" }, app.business, { "If-Match": current.etag });
   assert.equal(edited.data.card, null);
   assert.equal(edited.data.status, "draft");
-  assert.equal((await app.request("POST", route + "/publish", { confirm: true })).status, 409);
+  // Рейтинг не блокирует подтверждённую ручную публикацию (контракт main).
+  assert.equal((await app.request("POST", route + "/publish", { confirm: true })).status, 200);
   const team = await app.request("POST", "/api/teams", teamData, app.student);
   const teamRoute = `/api/teams/${team.data.id}`;
   assert.equal((await app.request("PATCH", teamRoute, { name: "Новая команда" }, app.student, { "If-Match": team.etag })).status, 200);

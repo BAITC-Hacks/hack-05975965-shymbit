@@ -1,0 +1,6 @@
+.document-import { margin-bottom: 1.5rem; }
+.document-import pre { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; padding: .75rem; }
+.document-import blockquote { white-space: pre-wrap; overflow-wrap: anywhere; margin: .75rem; }
+.import-consent { display: flex; align-items: flex-start; gap: .75rem; margin: 1rem 0; }
+.import-consent input { flex: 0 0 auto; width: 1.2rem; height: 1.2rem; margin-top: .15rem; }
+.nav { flex-wrap: wrap; }

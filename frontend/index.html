@@ -3,7 +3,18 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#101113" />
+    <meta name="theme-color" content="#f6f5f0" />
+    <script>
+      (() => {
+        let theme = 'light';
+        try {
+          if (localStorage.getItem('ai-sana-theme') === 'dark') theme = 'dark';
+        } catch { /* Настройки браузера могут запрещать хранилище. */ }
+        document.documentElement.dataset.theme = theme;
+        document.documentElement.style.colorScheme = theme;
+        document.querySelector('meta[name="theme-color"]').setAttribute('content', theme === 'dark' ? '#101113' : '#f6f5f0');
+      })();
+    </script>
     <meta name="description" content="AI Sana Challenge Hub — образовательные задачи от бизнеса для студенческих команд" />
     <title>AI Sana Challenge Hub</title>
   </head>

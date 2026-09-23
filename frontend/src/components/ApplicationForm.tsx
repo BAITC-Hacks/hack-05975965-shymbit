@@ -14,10 +14,10 @@ export function ApplicationForm({ taskId, onClose }: { taskId: string; onClose: 
   const busy = useRef(false)
   const [sentKeys, setSentKeys] = useState<string[]>([])
   const storageKey = `application:${taskId}${draft.teamId ? ':' + draft.teamId : ''}`
-  const sent = sentKeys.includes(storageKey) || localStorage.getItem(storageKey) === 'sent'
+  const sent = sentKeys.includes(storageKey)
   const [teams, setTeams] = useState<Team[]>([])
   const [teamsError, setTeamsError] = useState('')
-  useEffect(() => { api.getTeams().then(setTeams).catch(() => setTeamsError('Не удалось загрузить профили команд. Отклик можно отправить без выбора профиля.')) }, [])
+  useEffect(() => { api.getMyTeams().then(setTeams).catch(() => setTeamsError('Не удалось загрузить профили команд. Отклик можно отправить без выбора профиля.')) }, [])
   const update = (key: keyof ApplicationDraft, value: string | string[]) => setDraft((current) => ({ ...current, [key]: value }) as ApplicationDraft)
 
   const submit = async (event: FormEvent) => {
@@ -28,7 +28,7 @@ export function ApplicationForm({ taskId, onClose }: { taskId: string; onClose: 
     if (draft.teamName.trim().length < 2 || draft.contact.trim().length < 2 || draft.solution.trim().length < 10) { showToast('Название и контакт — от 2 символов, описание решения — от 10.', 'error'); return }
     busy.current = true
     setSending(true)
-    try { await api.createApplication(taskId, draft); localStorage.setItem(storageKey, 'sent'); setSentKeys((keys) => [...keys, storageKey]); showToast('Отклик успешно отправлен.', 'success') }
+    try { await api.createApplication(taskId, draft); setSentKeys((keys) => [...keys, storageKey]); showToast('Отклик успешно отправлен.', 'success') }
     catch (error) { showToast(getErrorMessage(error), 'error') }
     finally { busy.current = false; setSending(false) }
   }

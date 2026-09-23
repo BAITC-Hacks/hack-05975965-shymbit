@@ -11,6 +11,7 @@ export function ClarifyPage() {
   const { id = '' } = useParams()
   const navigate = useNavigate()
   const { showToast } = useToast()
+  const [etag, setEtag] = useState<string>()
   const [questions, setQuestions] = useState<ClarificationQuestion[]>([])
   const [answers, setAnswers] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(true)
@@ -18,7 +19,8 @@ export function ClarifyPage() {
   const [generating, setGenerating] = useState(false)
   const [error, setError] = useState('')
 
-  const applyQuestions = useCallback((result: ClarificationQuestion[]) => {
+  const applyQuestions = useCallback((result: ClarificationQuestion[] & { etag?: string }) => {
+    setEtag(result.etag)
     setQuestions(result)
     setAnswers(Object.fromEntries(result.map((question) => [question.id, question.answer || ''])))
   }, [])
@@ -33,21 +35,27 @@ export function ClarifyPage() {
   }, [id, applyQuestions])
 
   useEffect(() => {
+    let active = true
     const loadExisting = async () => {
       setLoading(true); setError('')
       try {
         const task = await api.getTask(id)
-        if (task.clarificationQuestions?.length) applyQuestions(task.clarificationQuestions)
-        else applyQuestions(await api.clarifyTask(id))
-      } catch (loadError) { setError(getErrorMessage(loadError)) }
-      finally { setLoading(false) }
+        if (!active) return
+        if (task.clarificationQuestions?.length) applyQuestions(Object.assign(task.clarificationQuestions, { etag: task.etag }))
+        else {
+          const result = await api.clarifyTask(id)
+          if (active) applyQuestions(result)
+        }
+      } catch (loadError) { if (active) setError(getErrorMessage(loadError)) }
+      finally { if (active) setLoading(false) }
     }
     void loadExisting()
+    return () => { active = false }
   }, [id, applyQuestions])
 
   const save = async () => {
     setSaving(true)
-    try { await api.saveAnswers(id, answers); showToast('Ответы сохранены.', 'success'); return true }
+    try { const saved = await api.saveAnswers(id, answers, etag); setEtag(saved?.etag); showToast('Ответы сохранены.', 'success'); return true }
     catch (saveError) { showToast(getErrorMessage(saveError), 'error'); return false }
     finally { setSaving(false) }
   }

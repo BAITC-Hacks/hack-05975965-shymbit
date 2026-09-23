@@ -6,6 +6,8 @@ import { TagInput } from '../components/TagInput'
 import { TaskProgress } from '../components/TaskProgress'
 import { useToast } from '../components/Toast'
 import { api, getErrorMessage } from '../lib/api'
+import { DocumentImport } from '../components/DocumentImport'
+import { getSession } from '../lib/session'
 import type { TaskDraft } from '../types'
 
 const emptyDraft: TaskDraft = {
@@ -29,6 +31,7 @@ export function CreateTaskPage() {
   const navigate = useNavigate()
   const { showToast } = useToast()
   const [draft, setDraft] = useState<TaskDraft>(emptyDraft)
+  const [etag, setEtag] = useState<string>()
   const [errors, setErrors] = useState<Partial<Record<keyof TaskDraft, string>>>({})
   const [loading, setLoading] = useState(Boolean(id))
   const [loadError, setLoadError] = useState('')
@@ -39,6 +42,9 @@ export function CreateTaskPage() {
     let active = true
     api.getTask(id).then((task) => {
       if (!active) return
+      if (task.ownerId !== getSession()?.user.id && import.meta.env.VITE_USE_MOCK_API !== 'true') throw new Error('Редактировать задачу может только её владелец.')
+      if (['published', 'archived'].includes(task.status)) throw new Error('Сначала архивируйте и восстановите задачу для редактирования.')
+      setEtag(task.etag)
       setDraft({
         title: task.title, shortDescription: task.shortDescription, organization: task.organization,
         contactPerson: task.contactPerson || '', desiredResult: task.desiredResult || task.expectedResult || '',
@@ -53,6 +59,12 @@ export function CreateTaskPage() {
   const validate = () => {
     const next: typeof errors = {}
     requiredKeys.forEach((key) => { if (!String(draft[key]).trim()) next[key] = 'Заполните это поле.' })
+    for (const [key, min, max] of [['title', 3, 200], ['shortDescription', 10, 5000], ['organization', 2, 200], ['contactPerson', 2, 200], ['desiredResult', 1, 5000], ['availableData', 0, 5000], ['constraints', 0, 5000], ['deadline', 1, 100]] as const) {
+      if (draft[key].trim().length < min || draft[key].trim().length > max) next[key] = `Длина поля: от ${min} до ${max} символов.`
+    }
+    for (const key of ['skills', 'technologies'] as const) {
+      if (draft[key].length > 30 || draft[key].some((value) => !value.trim() || value.length > 100)) next[key] = 'До 30 значений, каждое от 1 до 100 символов.'
+    }
     if (!draft.skills.length) next.skills = 'Добавьте хотя бы один навык.'
     setErrors(next)
     return Object.keys(next).length === 0
@@ -69,7 +81,7 @@ export function CreateTaskPage() {
     if (!validate()) { showToast('Проверьте обязательные поля.', 'error'); return }
     setSaving(true)
     try {
-      const task = id ? await api.updateTask(id, draft) : await api.createTask(draft)
+      const task = id ? await api.updateTask(id, draft, etag) : await api.createTask(draft)
       showToast(id ? 'Изменения сохранены.' : 'Черновик задачи сохранён.', 'success')
       navigate(`/tasks/${task.id || id}${clarify ? '/clarify' : ''}`)
     } catch (error) {
@@ -86,6 +98,7 @@ export function CreateTaskPage() {
         <Link className="back-link" to={id ? `/tasks/${id}` : '/'}><ArrowLeft size={17} />Назад</Link>
         <TaskProgress step={1} />
         <div className="page-heading"><span className="eyebrow">Шаг 1 / 3 · Черновик</span><h1>{id ? <>Уточните <em>вашу задачу.</em></> : <>Большой проект начинается <em>с вашей задачи.</em></>}</h1><p>Опишите проблему своими словами. На следующем шаге AI задаст вопросы и поможет собрать понятную карточку.</p></div>
+        <DocumentImport targetType="task" targetId={id} disabled={saving} onApply={(values) => setDraft((current) => ({ ...current, ...values }) as TaskDraft)} />
         <form className="form-card" onSubmit={submit} noValidate>
           <div className="form-section"><div className="form-section__title"><span>1</span><div><h2>Основная информация</h2><p>Коротко обозначьте суть и владельца задачи.</p></div></div>
             <div className="form-grid">

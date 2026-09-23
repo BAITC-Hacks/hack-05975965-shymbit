@@ -5,6 +5,8 @@ import { ErrorState, Loader } from '../components/AsyncState'
 import { TagInput } from '../components/TagInput'
 import { useToast } from '../components/Toast'
 import { api, getErrorMessage } from '../lib/api'
+import { DocumentImport } from '../components/DocumentImport'
+import { getSession } from '../lib/session'
 import type { TeamDraft } from '../types'
 
 const empty: TeamDraft = { name: '', description: '', members: [{ name: '', role: '', skills: [] }], skills: [], technologies: [], projects: [], githubUrls: [] }
@@ -16,6 +18,7 @@ export function TeamEditorPage() {
   const { id } = useParams()
   const navigate = useNavigate()
   const { showToast } = useToast()
+  const [etag, setEtag] = useState<string>()
   const [draft, setDraft] = useState<TeamDraft>(empty)
   const [loading, setLoading] = useState(Boolean(id))
   const [loadError, setLoadError] = useState('')
@@ -26,7 +29,10 @@ export function TeamEditorPage() {
     let active = true
     if (!id) { setDraft(empty); setLoading(false); return }
     setLoading(true); setLoadError('')
-    api.getTeam(id).then(({ name, description, members, skills, technologies, projects, githubUrls }) => { if (active) setDraft({ name, description, members, skills, technologies, projects, githubUrls }) }).catch((err) => { if (active) setLoadError(getErrorMessage(err)) }).finally(() => { if (active) setLoading(false) })
+    api.getTeam(id).then(({ name, description, members, skills, technologies, projects, githubUrls, ownerId, etag }) => { if (active) {
+      if (ownerId !== getSession()?.user.id && import.meta.env.VITE_USE_MOCK_API !== 'true') throw new Error('Редактировать команду может только её владелец.')
+      setEtag(etag); setDraft({ name, description, members, skills, technologies, projects, githubUrls })
+    } }).catch((err) => { if (active) setLoadError(getErrorMessage(err)) }).finally(() => { if (active) setLoading(false) })
     return () => { active = false }
   }, [id])
   const set = <K extends keyof TeamDraft>(key: K, value: TeamDraft[K]) => setDraft((current) => ({ ...current, [key]: value }))
@@ -41,7 +47,7 @@ export function TeamEditorPage() {
     const tagLists = [...draft.members.map((member) => member.skills), draft.skills, draft.technologies]
     if (tagLists.some((tags) => tags.some((tag) => tag.length > 100)) || draft.skills.length > 50 || draft.technologies.length > 50 || draft.members.some((member) => member.skills.length > 30)) return setError('До 50 навыков и технологий команды, до 30 навыков участника. Значение — до 100 символов.')
     busy.current = true; setSaving(true)
-    try { const team = id ? await api.updateTeam(id, draft) : await api.createTeam(draft); showToast('Профиль команды сохранён.', 'success'); navigate(`/teams/${team.id}`) }
+    try { const team = id ? await api.updateTeam(id, draft, etag) : await api.createTeam(draft); showToast('Профиль команды сохранён.', 'success'); navigate(`/teams/${team.id}`) }
     catch (err) { setError(getErrorMessage(err)) }
     finally { busy.current = false; setSaving(false) }
   }
@@ -50,6 +56,7 @@ export function TeamEditorPage() {
   return <div className="page"><div className="container container--narrow">
     <Link className="back-link" to={id ? `/teams/${id}` : '/teams'}><ArrowLeft size={16} />К командам</Link>
     <div className="page-heading"><span className="pill"><Users size={15} />Профиль команды</span><h1>{id ? 'Ваша команда, в деталях' : 'Начните с вашей команды'}</h1><p>Покажите, что вы умеете. AI учтёт навыки каждого участника при составлении плана.</p></div>
+    <DocumentImport targetType="team" targetId={id} disabled={saving} onApply={(values) => setDraft((current) => ({ ...current, ...values }) as TeamDraft)} />
     <form className="form-card team-editor" onSubmit={submit}><fieldset disabled={saving}>
       <section className="form-section"><h2>01 · О команде</h2><div className="form-grid"><label className="field field--wide"><span>Название *</span><input required minLength={2} maxLength={200} value={draft.name} onChange={(e) => set('name', e.target.value)} placeholder="Например, Sana Makers" /></label><label className="field field--wide"><span>Описание *</span><textarea required minLength={10} maxLength={3000} rows={4} value={draft.description} onChange={(e) => set('description', e.target.value)} placeholder="Что вас объединяет и какие задачи вы хотите решать?" /></label></div></section>
       <section className="form-section"><div className="section-toolbar"><h2>02 · Участники</h2><button type="button" className="button button--secondary button--small" disabled={draft.members.length >= 30} onClick={() => set('members', [...draft.members, { name: '', role: '', skills: [] }])}><Plus size={16} />Добавить участника</button></div>

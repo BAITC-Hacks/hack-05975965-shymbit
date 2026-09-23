@@ -37,7 +37,7 @@ export function AssistantPlanner({ taskId }: { taskId: string }) {
   const historyVersion = useRef(0)
   const loadTeams = useCallback(async () => {
     setLoading(true); setError('')
-    try { setTeams(await api.getTeams()) } catch (err) { setError(getErrorMessage(err)) } finally { setLoading(false) }
+    try { setTeams(await api.getMyTeams()) } catch (err) { setError(getErrorMessage(err)) } finally { setLoading(false) }
   }, [])
   useEffect(() => { void loadTeams() }, [loadTeams])
   const loadHistory = useCallback(async () => {

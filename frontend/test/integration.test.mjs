@@ -41,20 +41,21 @@ const fakeAI = {
   },
 };
 
-async function scenario(api) {
+async function scenario(api, as = () => {}) {
+  as('student');
   const team = await api.createTeam(teamDraft);
   assert.ok(team.id);
-  const edited = await api.updateTeam(team.id, { ...teamDraft, name: 'Обновлённая команда' });
+  const edited = await api.updateTeam(team.id, { ...teamDraft, name: 'Обновлённая команда' }, team.etag);
   assert.equal(edited.name, 'Обновлённая команда');
   assert.equal((await api.getTeam(team.id)).projects[0].url, teamDraft.projects[0].url);
   assert.ok((await api.getTeams()).some((value) => value.id === team.id));
+  as('business');
   const task = await api.createTask(taskDraft);
-  await assert.rejects(() => api.publishTask(task.id));
   assert.ok(!(await api.getTasks()).some((value) => value.id === task.id));
   assert.ok((await api.getTasks('draft')).some((value) => value.id === task.id));
   assert.ok((await api.getTasks('all')).some((value) => value.id === task.id));
   const questions = await api.clarifyTask(task.id);
-  await api.saveAnswers(task.id, Object.fromEntries(questions.map((q) => [q.id, 'По контрольным вопросам'])));
+  await api.saveAnswers(task.id, Object.fromEntries(questions.map((q) => [q.id, 'По контрольным вопросам'])), questions.etag);
   const card = await api.generateTask(task.id);
   assert.ok(card.problem && card.goal && card.successCriteria);
   assert.ok(!(await api.getTasks()).some((value) => value.id === task.id));
@@ -72,12 +73,14 @@ async function scenario(api) {
   await assert.rejects(() => api.generateTask(task.id));
   const review = { taskId: task.id, authorName: 'Университет', score: 5, text: 'Команда подготовила полезное решение.' };
   await assert.rejects(() => api.createTeamReview(team.id, review));
+  as('student');
   const application = await api.createApplication(task.id, {
     teamId: team.id, teamName: edited.name, members: 'Алия', solution: 'Создадим веб-приложение для студентов.',
     technologies: ['React'], contact: 'team@example.com', comment: 'Готовы к пилоту',
   });
   assert.equal(application.teamId, team.id);
   assert.ok(application.solution);
+  as('business');
   assert.equal((await api.getApplications(task.id))[0].teamId, team.id);
   await api.updateApplication(application.id, 'accepted');
   const savedReview = await api.createTeamReview(team.id, review);
@@ -85,6 +88,7 @@ async function scenario(api) {
   assert.equal((await api.getTeam(team.id)).rating.average, 5);
   assert.equal((await api.getTeamReviews(team.id)).length, 1);
   await assert.rejects(() => api.createTeamReview(team.id, review));
+  as('student');
   assert.equal((await api.getAssistantPlans(task.id, team.id)).length, 0);
   const plan = await api.generateAssistantPlan(task.id, team.id, 'Успеть за 5 часов');
   for (const key of ['milestones', 'assignments', 'risks', 'firstTasks', 'questionsForBusiness']) assert.ok(plan.plan[key].length);
@@ -93,16 +97,20 @@ async function scenario(api) {
   assert.equal((await api.getAssistantPlan(plan.id)).id, plan.id);
   await api.generateAssistantPlan(task.id, team.id);
   assert.equal((await api.getAssistantPlans(task.id, team.id)).length, 2);
+  as('business');
   await api.archiveTask(task.id);
   assert.ok(!(await api.getTasks()).some((value) => value.id === task.id));
   assert.ok((await api.getTasks('archived')).some((value) => value.id === task.id));
-  await assert.rejects(() => api.publishTask(task.id));
+  as('student');
   await assert.rejects(() => api.generateAssistantPlan(task.id, team.id));
+  as('business');
   assert.ok(!(await api.getTasks()).some((value) => value.id === task.id));
   assert.equal((await api.restoreTask(task.id)).status, 'ready');
   assert.ok(!(await api.getTasks()).some((value) => value.id === task.id));
   assert.equal((await api.getApplications(task.id))[0].status, 'accepted');
+  as('student');
   assert.equal((await api.getAssistantPlans(task.id, team.id)).length, 2);
+  as('business');
   await api.archiveTask(task.id);
   assert.equal((await api.publishTask(task.id)).status, 'published');
   assert.ok((await api.getTasks()).some((value) => value.id === task.id));
@@ -131,10 +139,19 @@ test('Frontend-клиент и backend: команда, задача, откли
       },
     });
     const { api } = await vite.ssrLoadModule('/src/lib/api.ts');
-    await t.test('Реальный backend: публикация, каталог и основной сценарий', () => scenario(api));
+    const { getSession, setSession } = await vite.ssrLoadModule('/src/lib/session.ts');
+    const actors = {};
+    for (const role of ['business', 'student']) {
+      await api.register({ name: 'Проверка клиента', email: role + '@example.test', password: 'test-password-12345', role });
+      actors[role] = getSession();
+    }
+    const as = (role) => setSession(actors[role]);
+    await t.test('Реальный backend: публикация, каталог и основной сценарий', () => scenario(api, as));
     await assert.rejects(() => api.getTeam('00000000-0000-4000-8000-000000000000'), (e) => e.status === 404);
+    as('student');
     await assert.rejects(() => api.createTeam({ ...teamDraft, githubUrls: ['https://example.com'] }), (e) => e.status === 400);
     await t.test('Конфликт AI-генерации возвращает 409 и сохраняет актуальную задачу', async () => {
+      as('business');
       const task = await api.createTask(taskDraft);
       const started = Promise.withResolvers();
       const release = Promise.withResolvers();
@@ -146,13 +163,45 @@ test('Frontend-клиент и backend: команда, задача, откли
       const conflict = assert.rejects(api.generateTask(task.id), (error) => error.status === 409 && error.message.includes('Обновите данные'));
       try {
         await started.promise;
-        await api.updateTask(task.id, { title: 'Актуальное название после правки' });
+        await api.updateTask(task.id, { title: 'Актуальное название после правки' }, task.etag);
       } finally {
         release.resolve();
       }
       await conflict;
       assert.equal((await api.getTask(task.id)).title, 'Актуальное название после правки');
       aiService.generateCard = fakeAI.generateCard;
+    });
+    await t.test('Версия формы, личные разделы, импорт и публичная карточка без AI', async () => {
+      as('business');
+      const task = await api.createTask(taskDraft);
+      assert.ok(task.etag);
+      await api.updateTask(task.id, { title: 'Новые данные бизнеса' }, task.etag);
+      await assert.rejects(() => api.updateTask(task.id, { title: 'Устаревшая форма' }, task.etag), (e) => e.status === 409);
+      await assert.rejects(() => api.updateTask(task.id, { title: 'Нет версии' }), (e) => e.status === 428);
+      aiService.extractFields = async (type, document) => ({ suggestions: [{ field: type === 'task' ? 'shortDescription' : 'description',
+        value: document.pages[0].text, source: { page: null, excerpt: document.pages[0].text }, warnings: [] }], warnings: [] });
+      const file = new File(['Описание образовательного проекта'], 'project.txt', { type: 'text/plain' });
+      const imported = await api.extractDocument(file, 'task', task.id);
+      assert.equal(imported.suggestions[0].value, 'Описание образовательного проекта');
+      assert.equal((await api.getTask(task.id)).shortDescription, taskDraft.shortDescription);
+      await api.publishTask(task.id);
+      as('student');
+      const publicTask = await api.getTask(task.id);
+      assert.equal(publicTask.shortDescription, taskDraft.shortDescription);
+      assert.ok(!publicTask.contactPerson && !publicTask.ownerId);
+      assert.ok((await api.getMyTeams()).length);
+      assert.equal((await api.getMyApplications())[0].status, 'accepted');
+      assert.equal((await api.extractDocument(file, 'team')).suggestions[0].field, 'description');
+      await assert.rejects(() => api.extractDocument(file, 'task'), (e) => e.status === 403);
+      const team = (await api.getMyTeams())[0];
+      const form = await api.getTeam(team.id);
+      await api.updateTeam(team.id, { ...teamDraft, name: 'Новая версия профиля' }, form.etag);
+      await assert.rejects(() => api.updateTeam(team.id, teamDraft, form.etag), (e) => e.status === 409);
+      await api.logout();
+      assert.equal(getSession(), null);
+      await assert.rejects(() => api.getMyTeams(), (e) => e.status === 401);
+      await api.login('student@example.test', 'test-password-12345');
+      assert.equal((await api.me()).role, 'student');
     });
     const { mockApi } = await vite.ssrLoadModule('/src/lib/mockApi.ts');
     await t.test('Mock сохраняет правила публикации и каталога backend', () => scenario(mockApi));

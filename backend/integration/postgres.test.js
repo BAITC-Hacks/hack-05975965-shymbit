@@ -10,7 +10,9 @@ import { pathToFileURL } from 'node:url';
 import { postgresFixture } from '../test-support/postgres.js';
 import { migrate, checkSchema } from '../src/db/migrate.js';
 import { importJson } from '../src/db/importJson.js';
+import { register, versionHeaders } from '../testSupport.js';
 import { createApp } from '../src/app.js';
+import { tokenHash } from '../src/security.js';
 
 const draft = { title: 'Проверка базы', shortDescription: 'Описание задачи для проверки PostgreSQL.', organization: 'Университет', contactPerson: 'Координатор', status: 'draft', skills: ['React'], technologies: [], deadline: '2026-12-01' };
 const teamDraft = { name: 'Команда', description: 'Разработка учебных проектов', members: [{ name: 'Алия', role: 'Разработчик', skills: ['React'] }], skills: ['React'], technologies: ['React'], projects: [], githubUrls: [] };
@@ -26,15 +28,15 @@ test('PostgreSQL: миграции, API, конкуренция, импорт и
 
   await t.test('повторные и параллельные миграции, контрольная сумма', async () => {
     await Promise.all([migrate(pool), migrate(fixture.pool())]);
-    assert.equal((await pool.query('SELECT count(*) FROM schema_migrations')).rows[0].count, '1');
-    await pool.query("UPDATE schema_migrations SET checksum='wrong'");
+    assert.equal((await pool.query('SELECT count(*) FROM schema_migrations')).rows[0].count, '2');
+    await pool.query("UPDATE schema_migrations SET checksum='wrong' WHERE name='001_initial.sql'");
     await assert.rejects(() => migrate(pool), /миграци/);
     await assert.rejects(() => checkSchema(pool));
     // Восстанавливаем только тестовую схему, повторно применяя неизменённую миграцию.
     const { createHash } = await import('node:crypto');
     const { readFile } = await import('node:fs/promises');
     const sql = await readFile(new URL('../migrations/001_initial.sql', import.meta.url), 'utf8');
-    await pool.query('UPDATE schema_migrations SET checksum=$1', [createHash('sha256').update(sql).digest('hex')]);
+    await pool.query("UPDATE schema_migrations SET checksum=$1 WHERE name='001_initial.sql'", [createHash('sha256').update(sql).digest('hex')]);
     await checkSchema(pool);
   });
 
@@ -44,17 +46,23 @@ test('PostgreSQL: миграции, API, конкуренция, импорт и
       await writeFile(path.join(directory, '002_broken.sql'), 'CREATE TABLE rollback_probe (id integer); SELECT * FROM missing_probe;');
       await assert.rejects(() => migrate(pool, pathToFileURL(directory + path.sep)));
       assert.equal((await pool.query("SELECT to_regclass('rollback_probe') AS name")).rows[0].name, null);
-      assert.equal((await pool.query('SELECT count(*) FROM schema_migrations')).rows[0].count, '1');
+      assert.equal((await pool.query('SELECT count(*) FROM schema_migrations')).rows[0].count, '2');
       await migrate(pool);
     } finally { await rm(directory, { recursive: true, force: true }); }
   });
 
-  let task, team, savedApplication;
+  let task, team, savedApplication, businessAuth;
   await t.test('HTTP: черновик, AI, публикация, профиль, отклик, архив и восстановление', async () => {
     const server = createApp({ store, aiService: { async generateCard(value) { return makeReady(value); }, async generateQuestions() { return [{ question: 'Какие данные?' }]; } } }).listen(0, '127.0.0.1');
     await once(server, 'listening');
+    const baseUrl = `http://127.0.0.1:${server.address().port}`;
+    const business = await register(baseUrl, 'business');
+    businessAuth = business;
+    const student = await register(baseUrl, 'student');
     const request = async (method, route, body, status = 200) => {
-      const response = await fetch(`http://127.0.0.1:${server.address().port}${route}`, { method, headers: { 'Content-Type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body) });
+      const token = method === 'POST' && (route === '/api/teams' || route.endsWith('/applications')) ? student.token : business.token;
+      const version = route.endsWith('/answers') ? await versionHeaders(baseUrl, route, token) : {};
+      const response = await fetch(`http://127.0.0.1:${server.address().port}${route}`, { method, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, ...version }, body: body === undefined ? undefined : JSON.stringify(body) });
       const result = await response.json();
       assert.equal(response.status, status, JSON.stringify(result));
       return result;
@@ -80,6 +88,31 @@ test('PostgreSQL: миграции, API, конкуренция, импорт и
       assert.equal((await request('GET', `/api/tasks/${task.id}/applications`)).items[0].status, 'accepted');
       await request('GET', '/api/tasks/unknown', undefined, 404);
       await request('GET', '/ready');
+    } finally { await new Promise((resolve) => server.close(resolve)); }
+  });
+
+  await t.test('аккаунты, сессии и назначение владельца переживают смену адаптера', async () => {
+    assert.equal((await second.getUser(businessAuth.user.id)).email, 'business@example.test');
+    assert.equal((await second.getSession(tokenHash(businessAuth.token))).userId, businessAuth.user.id);
+    const legacy = await store.createTask(draft);
+    const student = await second.findUserByEmail('student@example.test');
+    await assert.rejects(() => store.assignLegacyOwner('tasks', legacy.id, student.id));
+    await store.assignLegacyOwner('tasks', legacy.id, businessAuth.user.id);
+    assert.equal((await second.getTask(legacy.id)).ownerId, businessAuth.user.id);
+    await assert.rejects(() => second.assignLegacyOwner('tasks', legacy.id, businessAuth.user.id));
+    assert.equal((await pool.query('SELECT count(*) FROM ownership_migrations')).rows[0].count, '1');
+    const snapshot = await store.getTeam(team.id);
+    await second.updateTeam(team.id, { name: 'Профиль изменился' }, snapshot);
+    await assert.rejects(() => store.updateTeam(team.id, { name: 'Старая форма' }, snapshot), (e) => e.status === 409);
+    const server = createApp({ store: second, aiService: {} }).listen(0, '127.0.0.1');
+    await once(server, 'listening');
+    try {
+      const headers = { Authorization: `Bearer ${businessAuth.token}` };
+      const url = `http://127.0.0.1:${server.address().port}`;
+      assert.equal((await fetch(`${url}/api/auth/me`, { headers })).status, 200);
+      assert.equal((await fetch(`${url}/api/auth/logout`, { method: 'POST', headers })).status, 204);
+      assert.equal(await store.getSession(tokenHash(businessAuth.token)), null);
+      assert.equal((await fetch(`${url}/api/auth/me`, { headers })).status, 401);
     } finally { await new Promise((resolve) => server.close(resolve)); }
   });
 
@@ -142,6 +175,19 @@ test('PostgreSQL: миграции, API, конкуренция, импорт и
     assert.equal((await importJson(pool, full, { apply: true })).inserted, 0);
     assert.deepEqual((await store.getTeam(teamId)).rating, { average: 5, reviewsCount: 1 });
     assert.deepEqual(await store.getAssistantPlan(full.assistantPlans[0].id), full.assistantPlans[0]);
+    const userId = randomUUID();
+    const migratedId = randomUUID();
+    const accounts = {
+      users: [{ id: userId, name: 'Перенесённый бизнес', email: 'imported@example.test', role: 'business', passwordHash: 'a'.repeat(32) + ':' + 'b'.repeat(128), createdAt: date }],
+      sessions: [{ tokenHash: 'a'.repeat(64), userId, expiresAt: new Date(Date.now() + 60000).toISOString() }],
+      tasks: [{ ...source.tasks[0], id: migratedId, ownerId: userId }],
+      ownershipMigrations: [{ collection: 'tasks', id: migratedId, ownerId: userId, createdAt: date }]
+    };
+    assert.equal((await importJson(pool, accounts, { apply: true })).inserted, 4);
+    assert.equal((await importJson(pool, accounts, { apply: true })).inserted, 0);
+    assert.equal((await second.getTask(migratedId)).ownerId, userId);
+    assert.equal((await second.getSession('a'.repeat(64))).userId, userId);
+    assert.equal((await second.findUserByEmail('imported@example.test')).passwordHash, accounts.users[0].passwordHash);
   });
 
   await t.test('новый процесс читает сохранённую запись после закрытия своего пула', async () => {
